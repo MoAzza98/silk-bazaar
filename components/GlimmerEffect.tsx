@@ -87,7 +87,7 @@ const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
         uniformsRef.current.u_active.value = 1.0
         uniformsRef.current.u_progress.value = 0.0
 
-        const duration = 2200
+        const duration = 1500
         const start = performance.now()
 
         function animate(now: number) {
