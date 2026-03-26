@@ -24,6 +24,7 @@ export default function HeroSection() {
   const [verbIndex, setVerbIndex] = useState(0)
   const [verbState, setVerbState] = useState<'in' | 'out'>('in')
   const [cardOffset, setCardOffset] = useState(0)
+  const [transitioning, setTransitioning] = useState(false)
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -31,18 +32,16 @@ export default function HeroSection() {
     return () => clearTimeout(t)
   }, [])
 
-  // Pixelation sweep — runs on a timer, not scroll
+  // Pixelation sweep — a STRIP that moves UP the image, not covering it
   const runPixelSweep = useCallback(() => {
     const canvas = canvasRef.current
     const img = imgRef.current
     if (!canvas || !img || !img.complete) return
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-
     const w = canvas.width
     const h = canvas.height
-    const duration = 800 // ms for sweep
+    const duration = 900
+    const stripHeight = h * 0.18 // strip is 18% of image height
     const start = performance.now()
 
     function animatePixel(now: number) {
@@ -52,60 +51,68 @@ export default function HeroSection() {
 
       const elapsed = now - start
       const progress = clamp(elapsed / duration, 0, 1)
-      const eased = 1 - Math.pow(1 - progress, 3)
-      const threshold = eased * h
+      // Ease: cubic ease-in-out
+      const eased = progress < 0.5
+        ? 4 * progress * progress * progress
+        : 1 - Math.pow(-2 * progress + 2, 3) / 2
 
-      if (progress >= 1) {
-        setTimeout(() => {
-          const c = canvasRef.current?.getContext('2d')
-          if (c) c.clearRect(0, 0, w, h)
-        }, 200)
-        return
-      }
+      // Strip position moves from bottom to top
+      const stripBottom = h - eased * (h + stripHeight)
+      const stripTop = stripBottom + stripHeight
 
-      const blockSize = Math.max(2, Math.round(6 + eased * 18))
-      const smallW = Math.ceil(w / blockSize)
-      const smallH = Math.ceil(h / blockSize)
-
-      const offscreen = document.createElement('canvas')
-      offscreen.width = smallW
-      offscreen.height = smallH
-      const offCtx = offscreen.getContext('2d')
-      if (!offCtx) { pixelAnimRef.current = requestAnimationFrame(animatePixel); return }
-
-      offCtx.drawImage(currentImg, 0, 0, smallW, smallH)
+      const clampedTop = Math.max(0, stripBottom)
+      const clampedBottom = Math.min(h, stripTop)
 
       currentCtx.clearRect(0, 0, w, h)
-      currentCtx.save()
-      currentCtx.beginPath()
-      currentCtx.rect(0, 0, w, threshold)
-      currentCtx.clip()
-      currentCtx.imageSmoothingEnabled = false
-      currentCtx.drawImage(offscreen, 0, 0, w, h)
-      currentCtx.restore()
 
-      pixelAnimRef.current = requestAnimationFrame(animatePixel)
+      if (clampedBottom > clampedTop) {
+        const blockSize = 12
+        const smallW = Math.ceil(w / blockSize)
+        const smallH = Math.ceil(h / blockSize)
+
+        const offscreen = document.createElement('canvas')
+        offscreen.width = smallW
+        offscreen.height = smallH
+        const offCtx = offscreen.getContext('2d')
+        if (!offCtx) { pixelAnimRef.current = requestAnimationFrame(animatePixel); return }
+
+        offCtx.drawImage(currentImg, 0, 0, smallW, smallH)
+
+        currentCtx.save()
+        currentCtx.beginPath()
+        currentCtx.rect(0, clampedTop, w, clampedBottom - clampedTop)
+        currentCtx.clip()
+        currentCtx.imageSmoothingEnabled = false
+        currentCtx.drawImage(offscreen, 0, 0, w, h)
+        currentCtx.restore()
+      }
+
+      if (progress < 1) {
+        pixelAnimRef.current = requestAnimationFrame(animatePixel)
+      }
     }
 
     if (pixelAnimRef.current) cancelAnimationFrame(pixelAnimRef.current)
     pixelAnimRef.current = requestAnimationFrame(animatePixel)
   }, [])
 
-  // Verb rotation — also triggers pixelation sweep and card shift
+  // Verb rotation — triggers pixelation sweep and card shift
   useEffect(() => {
     const interval = setInterval(() => {
       setVerbState('out')
+      setTransitioning(true)
       runPixelSweep()
       setTimeout(() => {
         setVerbIndex((i) => (i + 1) % VERBS.length)
         setCardOffset((o) => (o + 1) % LISTINGS.length)
         setVerbState('in')
+        setTimeout(() => setTransitioning(false), 500)
       }, 600)
     }, 3000)
     return () => clearInterval(interval)
   }, [runPixelSweep])
 
-  // Resize canvas to match image
+  // Resize canvas
   useEffect(() => {
     function resize() {
       const wrap = imageWrapRef.current
@@ -120,8 +127,8 @@ export default function HeroSection() {
     return () => window.removeEventListener('resize', resize)
   }, [loaded])
 
-  // Visible card stack: show 4 cards
-  const visibleCards = [0, 1, 2, 3].map((i) => ({
+  // Card stack: show 3 cards
+  const visibleCards = [0, 1, 2].map((i) => ({
     ...LISTINGS[(cardOffset + i) % LISTINGS.length],
     num: String((cardOffset + i) % LISTINGS.length + 1).padStart(2, '0'),
   }))
@@ -135,15 +142,15 @@ export default function HeroSection() {
         background: 'var(--color-bg)',
       }}
     >
-      {/* Hero background image — anchored to LEFT, bleeds off top & left */}
+      {/* Hero image — slightly left of center, ALL edges fade to background */}
       <div
         ref={imageWrapRef}
         style={{
           position: 'absolute',
-          top: -40,
-          left: -40,
-          width: '60%',
-          height: 'calc(100% + 40px)',
+          top: 40,
+          left: '5%',
+          width: '55%',
+          height: 'calc(100% - 80px)',
           pointerEvents: 'none',
         }}
       >
@@ -157,10 +164,8 @@ export default function HeroSection() {
             objectFit: 'cover',
             objectPosition: 'center',
             opacity: 0.92,
-            maskImage: 'linear-gradient(to left, transparent 0%, black 20%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to left, transparent 0%, black 20%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
-            maskComposite: 'intersect',
-            WebkitMaskComposite: 'source-in' as string,
+            maskImage: 'radial-gradient(ellipse 85% 85% at 45% 50%, black 50%, transparent 90%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at 45% 50%, black 50%, transparent 90%)',
           }}
         />
         <canvas
@@ -171,10 +176,8 @@ export default function HeroSection() {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            maskImage: 'linear-gradient(to left, transparent 0%, black 20%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
-            WebkitMaskImage: 'linear-gradient(to left, transparent 0%, black 20%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
-            maskComposite: 'intersect',
-            WebkitMaskComposite: 'source-in' as string,
+            maskImage: 'radial-gradient(ellipse 85% 85% at 45% 50%, black 50%, transparent 90%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 85% 85% at 45% 50%, black 50%, transparent 90%)',
           }}
         />
       </div>
@@ -186,27 +189,116 @@ export default function HeroSection() {
           maxWidth: 'var(--max-page)',
           margin: '0 auto',
           padding: '120px 32px 80px',
-          gap: 40,
           position: 'relative',
           zIndex: 1,
         }}
       >
-        {/* Left — headline (over image) */}
+        {/* LEFT — Cards (in the gap between image bleed and left page edge) */}
+        <div
+          className="hero-cards-col"
+          style={{
+            width: 260,
+            flexShrink: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            position: 'relative',
+            zIndex: 2,
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+            overflow: 'hidden',
+            position: 'relative',
+          }}>
+            {visibleCards.map((card, i) => {
+              const isTop = i === 0
+              return (
+                <div
+                  key={`card-${cardOffset}-${i}`}
+                  style={{
+                    background: 'rgba(245, 237, 228, 0.65)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid var(--color-mauve)',
+                    borderRadius: 4,
+                    padding: '14px 16px',
+                    opacity: isTop && transitioning ? 0 : 1,
+                    transform: transitioning
+                      ? `translateY(-${isTop ? 20 : 8}px)`
+                      : 'translateY(0)',
+                    transition: transitioning
+                      ? 'transform 600ms cubic-bezier(0.16, 1, 0.3, 1), opacity 400ms ease-out'
+                      : 'none',
+                  }}
+                >
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 500,
+                    fontSize: 11,
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: 8,
+                  }}>
+                    {card.num}
+                  </div>
+                  <p style={{
+                    fontFamily: 'var(--font-display)',
+                    fontWeight: 400,
+                    fontSize: 13,
+                    color: 'var(--color-text)',
+                    lineHeight: 1.5,
+                    margin: 0,
+                    marginBottom: 10,
+                  }}>
+                    {card.body}
+                  </p>
+                  <div style={{
+                    fontFamily: 'var(--font-mono)',
+                    fontWeight: 500,
+                    fontSize: 10,
+                    color: 'var(--color-twilight)',
+                    textAlign: 'right',
+                  }}>
+                    /query
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Spacer — pushes text to the right */}
+        <div style={{ flex: 1 }} />
+
+        {/* RIGHT — Headline text */}
         <div
           style={{
-            width: '50%',
+            width: '45%',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'flex-end',
           }}
           className="hero-text-col"
         >
           <div
             className={`load-fade ${loaded ? 'loaded-in' : ''}`}
             style={{
+              textAlign: 'right',
               transition: 'opacity 1200ms ease, filter 1200ms ease',
             }}
           >
-            <div style={{ fontFamily: 'var(--font-display)', fontWeight: 300, fontSize: 88, lineHeight: 1.05, color: '#1a1208' }} className="hero-title">
+            <div
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontWeight: 300,
+                fontSize: 88,
+                lineHeight: 1.05,
+                color: '#1a1208',
+              }}
+              className="hero-title"
+            >
               Silk Bazaar
             </div>
             <div style={{ position: 'relative', height: 95, overflow: 'hidden' }} className="hero-verb-wrap">
@@ -230,57 +322,12 @@ export default function HeroSection() {
             </div>
           </div>
         </div>
-
-        {/* Right — Perplexity-style query cards */}
-        <div className="hero-cards-col" style={{ width: '50%', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end' }}>
-          <div style={{ width: '100%', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 8, position: 'relative', overflow: 'hidden', minHeight: 280 }}>
-            {visibleCards.map((card, i) => (
-              <div
-                key={`${card.num}-${cardOffset}-${i}`}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.82)',
-                  backdropFilter: 'blur(24px)',
-                  WebkitBackdropFilter: 'blur(24px)',
-                  border: '1px solid rgba(201,149,108,0.15)',
-                  borderRadius: 14,
-                  padding: '12px 16px',
-                  display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: 12,
-                  animation: i === 0 ? 'cardSlideIn 500ms ease-out' : undefined,
-                  opacity: i === 0 ? 0.6 : 1,
-                  transform: i === 0 ? 'scale(0.97)' : undefined,
-                }}
-              >
-                {/* Search icon */}
-                <div style={{ flexShrink: 0, marginTop: 2 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-gold)" strokeWidth="2" strokeLinecap="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontFamily: 'var(--font-display)', fontWeight: 400, fontSize: 13, color: 'var(--color-text)', lineHeight: 1.45, margin: 0 }}>
-                    {card.body}
-                  </p>
-                </div>
-                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 500, fontSize: 10, color: 'var(--color-twilight)', flexShrink: 0, marginTop: 2, opacity: 0.7 }}>
-                  {card.num}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       <style>{`
-        @keyframes cardSlideIn {
-          from { opacity: 0; transform: scale(0.95) translateY(12px); }
-          to { opacity: 0.6; transform: scale(0.97) translateY(0); }
-        }
         @media (max-width: 767px) {
           .hero-cards-col { display: none !important; }
-          .hero-text-col { width: 100% !important; }
+          .hero-text-col { width: 100% !important; justify-content: center !important; }
           .hero-title { font-size: 48px !important; }
           .hero-verb { font-size: 48px !important; }
           .hero-verb-wrap { height: 55px !important; }
