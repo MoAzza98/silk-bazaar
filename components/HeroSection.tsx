@@ -18,17 +18,17 @@ const LISTINGS = [
   { body: 'DAO with 2.1M treasury, governance fatigue, needs operator' },
 ]
 
-// Edge bleed mask — gradual fade on all sides
-const EDGE_MASK = [
-  'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 8%, rgba(0,0,0,0.7) 18%, black 30%, black 70%, rgba(0,0,0,0.7) 82%, rgba(0,0,0,0.3) 92%, transparent 100%)',
-  'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 6%, rgba(0,0,0,0.8) 15%, black 28%, black 60%, rgba(0,0,0,0.6) 72%, rgba(0,0,0,0.2) 82%, transparent 90%)',
-].join(', ')
+// Page background color for gradient overlays
+const BG = 'rgb(249, 247, 245)'
+const BG0 = 'rgba(249, 247, 245, 0)'
+const BG92 = 'rgba(249, 247, 245, 0.92)'
 
 export default function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const glimmerRef = useRef<GlimmerHandle>(null)
   const [verbIndex, setVerbIndex] = useState(0)
-  const [verbState, setVerbState] = useState<'in' | 'out'>('in')
+  const [verbState, setVerbState] = useState<'idle' | 'exiting' | 'entering'>('idle')
+  const [prevVerbIndex, setPrevVerbIndex] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
   // Card animation
@@ -42,7 +42,7 @@ export default function HeroSection() {
     return () => clearTimeout(t)
   }, [])
 
-  // Card slide
+  // Card slide — DOM recycling approach
   const slideCards = useCallback(() => {
     if (slidingRef.current) return
     slidingRef.current = true
@@ -54,16 +54,19 @@ export default function HeroSection() {
     if (cards.length < 4) { slidingRef.current = false; return }
 
     const firstCard = cards[0] as HTMLElement
-    const cardH = firstCard.offsetHeight + 6
+    const cardH = firstCard.offsetHeight + 24 // card height + gap
 
-    track.style.transition = 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1)'
+    // Slide entire stack up by one card
+    track.style.transition = 'transform 1000ms cubic-bezier(0.72, 0, 0.24, 1)'
     track.style.transform = `translateY(-${cardH}px)`
 
+    // Fade/blur exiting top card
     const exitCard = cards[0] as HTMLElement
     exitCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
     exitCard.style.opacity = '0'
     exitCard.style.filter = 'blur(6px)'
 
+    // Fade in entering bottom card
     const enterCard = cards[3] as HTMLElement
     enterCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
     enterCard.style.opacity = '1'
@@ -86,23 +89,31 @@ export default function HeroSection() {
         }
         slidingRef.current = false
       })
-    }, 950)
+    }, 1050)
   }, [])
 
-  // Verb rotation + glimmer morph + card slide — all in lockstep
+  // Verb rotation + glimmer morph + card slide
   useEffect(() => {
     const interval = setInterval(() => {
-      setVerbState('out')
+      // Start exit: current word slides up + blurs out
+      setPrevVerbIndex(verbIndex)
+      setVerbState('exiting')
       glimmerRef.current?.morph()
       slideCards()
 
+      // After exit animation, swap word and enter
       setTimeout(() => {
         setVerbIndex((i) => (i + 1) % VERBS.length)
-        setVerbState('in')
+        setVerbState('entering')
       }, 600)
+
+      // Settle to idle
+      setTimeout(() => {
+        setVerbState('idle')
+      }, 1200)
     }, 3000)
     return () => clearInterval(interval)
-  }, [slideCards])
+  }, [slideCards, verbIndex])
 
   const cardIndices = [0, 1, 2, 3].map((i) => (cardBase + i) % LISTINGS.length)
 
@@ -110,61 +121,88 @@ export default function HeroSection() {
     <section
       ref={sectionRef}
       style={{
-        minHeight: '100vh',
         position: 'relative',
-        background: 'var(--color-bg)',
+        height: '100vh',
+        background: BG,
+        zIndex: 1,
       }}
     >
-      {/* Hero image — rendered through Three.js glimmer shader */}
+      {/* ===== HERO-BG: clips the oversized image ===== */}
       <div
         style={{
           position: 'absolute',
-          top: -20,
-          left: '-3%',
-          width: '88%',
-          height: 'calc(100% + 40px)',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          overflow: 'hidden',
           pointerEvents: 'none',
-          opacity: 0.9,
-          maskImage: EDGE_MASK,
-          WebkitMaskImage: EDGE_MASK,
-          maskComposite: 'intersect',
-          WebkitMaskComposite: 'source-in' as string,
         }}
       >
-        <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.jpg" />
+        {/* Oversized image container — centered, bleeds out of parent */}
+        <div
+          style={{
+            position: 'absolute',
+            width: 1610,
+            height: '110%',
+            top: -60,
+            left: '50%',
+            transform: 'translateX(-55%)',
+          }}
+        >
+          <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.jpg" />
+        </div>
+
+        {/* Edge bleed overlay — layered gradients of page bg color */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            pointerEvents: 'none',
+            backgroundImage: [
+              // Left edge: solid fade over 12%
+              `linear-gradient(90deg, ${BG} 0%, ${BG0} 12%)`,
+              // Right edge: fade from 80% to 100%
+              `linear-gradient(270deg, ${BG0} 75%, ${BG} 100%)`,
+              // Top and bottom: solid at edges, transparent in middle
+              `linear-gradient(${BG} 0%, transparent 14%, transparent 62%, ${BG92} 90%, ${BG} 100%)`,
+              // Radial vignette: fades corners
+              `radial-gradient(800px 120% at calc(50% - 160px) 40%, ${BG0} 70%, ${BG} 100%)`,
+            ].join(', '),
+          }}
+        />
       </div>
 
+      {/* ===== CONTENT LAYER ===== */}
       <div
         style={{
-          display: 'flex',
-          minHeight: '100vh',
+          position: 'relative',
+          zIndex: 2,
+          height: '100%',
           maxWidth: 'var(--max-page)',
           margin: '0 auto',
-          padding: '120px 32px 80px',
-          position: 'relative',
-          zIndex: 1,
+          padding: '0 32px',
         }}
       >
-        {/* LEFT — Card stack */}
+        {/* Query cards — absolute left */}
         <div
           className="hero-cards-col"
           style={{
-            width: 260,
-            flexShrink: 0,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            position: 'relative',
+            position: 'absolute',
+            top: 168,
+            left: 32,
+            width: 240,
             zIndex: 2,
           }}
         >
-          <div style={{ overflow: 'hidden', position: 'relative' }}>
+          <div style={{ overflow: 'hidden' }}>
             <div
               ref={cardTrackRef}
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 6,
+                gap: 24,
               }}
             >
               {cardIndices.map((listingIdx, i) => {
@@ -174,31 +212,48 @@ export default function HeroSection() {
                   <div
                     key={`slot-${i}`}
                     style={{
-                      background: 'rgba(245, 237, 228, 0.65)',
-                      backdropFilter: 'blur(16px)',
-                      WebkitBackdropFilter: 'blur(16px)',
-                      border: '1px solid var(--color-mauve)',
+                      position: 'relative',
+                      width: 240,
+                      minHeight: 140,
                       borderRadius: 4,
-                      padding: '14px 16px',
+                      border: '1px solid rgba(39, 26, 0, 0.1)',
+                      overflow: 'hidden',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      padding: '10px 12px',
                       opacity: i < 3 ? 1 : 0,
                     }}
                   >
+                    {/* Card background — semi-transparent white */}
                     <div style={{
-                      fontFamily: 'var(--font-mono)', fontWeight: 500,
-                      fontSize: 11, color: 'var(--color-text-secondary)', marginBottom: 8,
-                    }}>
-                      {num}
+                      position: 'absolute',
+                      inset: 0,
+                      background: 'rgba(255, 255, 255, 0.6)',
+                      borderRadius: 4,
+                      zIndex: 0,
+                    }} />
+                    {/* Card content */}
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                      <div style={{
+                        fontFamily: 'var(--font-mono)', fontWeight: 500,
+                        fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 10,
+                      }}>
+                        {num}
+                      </div>
+                      <p style={{
+                        fontFamily: 'var(--font-display)', fontWeight: 400,
+                        fontSize: 13, color: 'var(--color-text)',
+                        lineHeight: 1.5, margin: 0,
+                      }}>
+                        {card.body}
+                      </p>
                     </div>
-                    <p style={{
-                      fontFamily: 'var(--font-display)', fontWeight: 400,
-                      fontSize: 13, color: 'var(--color-text)',
-                      lineHeight: 1.5, margin: 0, marginBottom: 10,
-                    }}>
-                      {card.body}
-                    </p>
                     <div style={{
+                      position: 'relative', zIndex: 1,
                       fontFamily: 'var(--font-mono)', fontWeight: 500,
                       fontSize: 10, color: 'var(--color-twilight)', textAlign: 'right',
+                      marginTop: 8,
                     }}>
                       /query
                     </div>
@@ -209,17 +264,14 @@ export default function HeroSection() {
           </div>
         </div>
 
-        <div style={{ flex: 1 }} />
-
-        {/* RIGHT — Headline text */}
+        {/* Headline — absolute right */}
         <div
+          className="hero-headlines"
           style={{
-            width: '45%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'flex-end',
+            position: 'absolute',
+            top: 280,
+            right: 32,
           }}
-          className="hero-text-col"
         >
           <div
             className={`load-fade ${loaded ? 'loaded-in' : ''}`}
@@ -228,26 +280,62 @@ export default function HeroSection() {
               transition: 'opacity 1200ms ease, filter 1200ms ease',
             }}
           >
-            <div
+            {/* "Silk Bazaar" — static */}
+            <h1
               style={{
                 fontFamily: 'var(--font-display)', fontWeight: 300,
-                fontSize: 88, lineHeight: 1.05, color: '#1a1208',
+                fontSize: 96, lineHeight: '96px', textAlign: 'right',
+                color: '#1a1208', margin: 0,
               }}
               className="hero-title"
             >
               Silk Bazaar
-            </div>
-            <div style={{ position: 'relative', height: 110, overflow: 'hidden' }} className="hero-verb-wrap">
+            </h1>
+
+            {/* Verb rotator — overflow hidden clip mask */}
+            <div
+              style={{
+                position: 'relative',
+                overflow: 'hidden',
+                width: 600,
+                height: 96,
+                marginLeft: 'auto',
+              }}
+              className="hero-verb-wrap"
+            >
+              {/* Exiting word */}
+              {verbState === 'exiting' && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    fontFamily: 'var(--font-display)', fontWeight: 300,
+                    fontSize: 96, lineHeight: '96px', textAlign: 'right',
+                    color: 'var(--color-twilight)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    transform: 'translateY(-38px)',
+                    opacity: 0,
+                    filter: 'blur(12px)',
+                    transition: 'transform 0.6s cubic-bezier(0.45, 0, 0.55, 1), opacity 0.6s cubic-bezier(0.45, 0, 0.55, 1), filter 0.6s cubic-bezier(0.45, 0, 0.55, 1)',
+                  }}
+                >
+                  {VERBS[prevVerbIndex]}
+                </span>
+              )}
+
+              {/* Current/entering word */}
               <span
-                key={verbIndex}
                 style={{
+                  position: 'absolute',
+                  top: 0, left: 0, right: 0, bottom: 0,
                   fontFamily: 'var(--font-display)', fontWeight: 300,
-                  fontSize: 88, color: 'var(--color-twilight)',
-                  display: 'inline-block',
-                  transition: 'transform 600ms cubic-bezier(0.45, 0, 0.55, 1), opacity 600ms cubic-bezier(0.45, 0, 0.55, 1), filter 600ms cubic-bezier(0.45, 0, 0.55, 1)',
-                  transform: verbState === 'out' ? 'translateY(-20px)' : 'translateY(0)',
-                  opacity: verbState === 'out' ? 0 : 1,
-                  filter: verbState === 'out' ? 'blur(12px)' : 'blur(0)',
+                  fontSize: 96, lineHeight: '96px', textAlign: 'right',
+                  color: 'var(--color-twilight)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                  transform: verbState === 'entering' ? 'translateY(0)' : verbState === 'idle' ? 'translateY(0)' : 'translateY(38px)',
+                  opacity: verbState === 'entering' || verbState === 'idle' ? 1 : 0,
+                  filter: verbState === 'entering' || verbState === 'idle' ? 'blur(0px)' : 'blur(12px)',
+                  transition: verbState !== 'idle' ? 'transform 0.6s cubic-bezier(0.45, 0, 0.55, 1), opacity 0.6s cubic-bezier(0.45, 0, 0.55, 1), filter 0.6s cubic-bezier(0.45, 0, 0.55, 1)' : 'none',
                 }}
                 className="hero-verb"
               >
@@ -261,10 +349,10 @@ export default function HeroSection() {
       <style>{`
         @media (max-width: 767px) {
           .hero-cards-col { display: none !important; }
-          .hero-text-col { width: 100% !important; justify-content: center !important; }
-          .hero-title { font-size: 48px !important; }
-          .hero-verb { font-size: 48px !important; }
-          .hero-verb-wrap { height: 60px !important; }
+          .hero-headlines { top: 200px !important; right: 16px !important; left: 16px !important; }
+          .hero-title { font-size: 52px !important; line-height: 52px !important; }
+          .hero-verb { font-size: 52px !important; line-height: 52px !important; }
+          .hero-verb-wrap { width: 100% !important; height: 56px !important; }
         }
       `}</style>
     </section>
