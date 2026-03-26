@@ -162,14 +162,28 @@ export default function FizzleCanvas({ sectionRef }: Props) {
       animId = requestAnimationFrame(tick)
 
       const section = sectionRef.current
-      if (!section) return
+      if (!section || !canvas) return
 
       const rect = section.getBoundingClientRect()
       const vh = window.innerHeight
       const sectionH = section.offsetHeight
+
+      // Only activate when the section is approaching the viewport
+      // Section top is within 1 viewport height of being visible
+      const approaching = rect.top < vh * 1.2
+      const pastEnd = rect.bottom < 0
+
+      if (!approaching || pastEnd) {
+        // Hide canvas entirely when not in range
+        canvas.style.display = 'none'
+        lastProgress = 0
+        return
+      }
+
+      canvas.style.display = 'block'
+
       const progress = clamp(-rect.top / (sectionH - vh), 0, 1)
 
-      // Only redraw when progress changes meaningfully
       if (Math.abs(progress - lastProgress) < 0.0005 && progress > 0.01 && progress < 0.99) return
       lastProgress = progress
 
@@ -199,6 +213,7 @@ export default function FizzleCanvas({ sectionRef }: Props) {
         height: '100vh',
         zIndex: 10,
         pointerEvents: 'none',
+        display: 'none',
       }}
     />
   )
