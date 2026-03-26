@@ -154,7 +154,10 @@ export default function PetalRibbonSection() {
       const top = el.getBoundingClientRect().top
       const height = el.offsetHeight
       const vh = window.innerHeight
-      const d = clamp(-top / (height - vh), 0, 1)
+      // Start petals when section is still 40vh from reaching viewport top
+      // This means petals begin while the manifesto is still blurring out
+      const earlyStart = vh * 0.4
+      const d = clamp((-top + earlyStart) / (height - vh + earlyStart), 0, 1)
       progressRef.current = d
 
       // === RIBBON BG: gradual fizzle-in behind the petals ===
@@ -272,7 +275,7 @@ export default function PetalRibbonSection() {
     <section
       ref={sectionRef}
       data-section="petal-ribbon"
-      style={{ height: '600vh', position: 'relative', marginTop: '-30vh' }}
+      style={{ height: '600vh', position: 'relative' }}
     >
       <div
         className="petal-sticky"

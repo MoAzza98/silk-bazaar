@@ -27,7 +27,7 @@ export default function ManifestoSection() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '120px 32px 160px',
+        padding: '120px 32px 100px',
         willChange: 'opacity, filter',
       }}
     >
