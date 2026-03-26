@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useRef, useMemo } from 'react'
+import { useEffect, useRef, useMemo, useState } from 'react'
 import { clamp } from '@/lib/scrollUtils'
 import dynamic from 'next/dynamic'
 
@@ -7,112 +7,135 @@ const ThreeRibbon = dynamic(() => import('./ThreeRibbon'), { ssr: false })
 
 const HEADING = 'Silk Bazaar surfaces.'
 
-interface PetalConfig {
-  src: string
+// ====== SMALL PETAL CONFIG (canvas-rendered for performance) ======
+interface SmallPetal {
+  imgIdx: number // 0-6 for petal images
   size: number
-  startY: number
+  startY: number // 0-1 fraction of viewport
   speed: number
   swayAmp: number
   swayFreq: number
   rotation: number
   enterStart: number
-  enterEnd: number
-  exitStart: number
   exitEnd: number
-  blur: number
-  zIndex: number
 }
 
-function usePetalConfigs(): PetalConfig[] {
-  return useMemo(() => {
-    const petals: PetalConfig[] = []
-
-    function add(p: Partial<PetalConfig>) {
-      petals.push({
-        src: `/petals/petal-${(petals.length % 7) + 1}.png`,
-        size: p.size ?? 150,
-        startY: p.startY ?? 50,
-        speed: p.speed ?? 1,
-        swayAmp: p.swayAmp ?? 15,
-        swayFreq: p.swayFreq ?? 1,
-        rotation: p.rotation ?? 60,
-        enterStart: p.enterStart ?? 0,
-        enterEnd: p.enterEnd ?? 0.1,
-        exitStart: p.exitStart ?? 0.15,
-        exitEnd: p.exitEnd ?? 0.25,
-        blur: p.blur ?? 0,
-        zIndex: p.zIndex ?? 2,
-      })
-    }
-
-    // === PHASE 1: Trickle (d 0.00-0.12) — 3 small scouts ===
-    add({ size: 90,  startY: 20, speed: 1.1, enterStart: 0.00, enterEnd: 0.04, exitStart: 0.08, exitEnd: 0.14, swayAmp: 20, rotation: 50 })
-    add({ size: 75,  startY: 55, speed: 1.2, enterStart: 0.01, enterEnd: 0.05, exitStart: 0.09, exitEnd: 0.15, swayAmp: 25, rotation: 70 })
-    add({ size: 100, startY: 80, speed: 1.0, enterStart: 0.02, enterEnd: 0.06, exitStart: 0.10, exitEnd: 0.16, swayAmp: 18, rotation: 40 })
-
-    // === PHASE 2: Building (d 0.06-0.20) — 8 medium, filling vertical space ===
-    const buildYs = [5, 15, 28, 40, 52, 65, 75, 90]
-    buildYs.forEach((y, i) => {
-      add({
-        size: 110 + (i % 3) * 30,
-        startY: y,
-        speed: 0.9 + (i % 4) * 0.08,
-        enterStart: 0.06 + i * 0.008,
-        enterEnd: 0.10 + i * 0.008,
-        exitStart: 0.16 + i * 0.006,
-        exitEnd: 0.24 + i * 0.006,
-        swayAmp: 12 + (i % 3) * 6,
-        swayFreq: 0.8 + (i % 4) * 0.15,
-        rotation: 40 + i * 12,
-      })
+function generateSmallPetals(): SmallPetal[] {
+  const petals: SmallPetal[] = []
+  // 200 small petals with exponential density:
+  // d 0.00-0.04: ~10 petals enter
+  // d 0.02-0.06: ~30 more
+  // d 0.04-0.08: ~60 more
+  // d 0.06-0.10: ~100 more
+  for (let i = 0; i < 200; i++) {
+    // Exponential distribution: more petals enter later
+    const t = i / 200
+    const enterStart = t * t * 0.10 // quadratic: most enter near d=0.10
+    petals.push({
+      imgIdx: i % 7,
+      size: 60 + (i % 5) * 30, // 60-180px
+      startY: (i * 137 % 200) / 200, // pseudo-random Y spread
+      speed: 0.7 + (i % 8) * 0.08,
+      swayAmp: 8 + (i % 6) * 4,
+      swayFreq: 0.5 + (i % 5) * 0.2,
+      rotation: (i * 47) % 360,
+      enterStart,
+      exitEnd: enterStart + 0.08 + (i % 3) * 0.02, // each petal lives for 0.08-0.12 d
     })
+  }
+  return petals
+}
 
-    // === PHASE 3: Swarm (d 0.12-0.32) — 24 petals, dense, covering every area ===
-    // Grid: 6 columns x 4 rows of Y positions, staggered entry
-    const swarmYs = [2, 10, 18, 26, 34, 42, 50, 58, 66, 74, 82, 90,
-                     6, 14, 22, 30, 38, 46, 54, 62, 70, 78, 86, 94]
-    swarmYs.forEach((y, i) => {
-      const row = Math.floor(i / 6)
-      add({
-        size: 130 + (i % 5) * 25,
-        startY: y,
-        speed: 0.75 + (i % 6) * 0.06,
-        enterStart: 0.12 + i * 0.004,
-        enterEnd: 0.17 + i * 0.004,
-        exitStart: 0.26 + row * 0.01,
-        exitEnd: 0.34 + row * 0.01,
-        swayAmp: 10 + (i % 4) * 5,
-        swayFreq: 0.6 + (i % 5) * 0.12,
-        rotation: 30 + i * 8,
-        blur: i % 3 === 0 ? 2 : 0,
-      })
+// ====== BIG PETAL CONFIG (DOM elements for CSS blur) ======
+interface BigPetal {
+  src: string
+  size: number
+  gridX: number // 0-1 viewport fraction
+  gridY: number // 0-1 viewport fraction
+  speed: number
+  enterStart: number
+  enterEnd: number // fully on screen, sharp
+  blurStart: number // start blurring
+  exitEnd: number // fully gone
+}
+
+function generateBigPetals(): BigPetal[] {
+  // 10 big petals in a grid covering the entire viewport
+  // Each is massive (120-160vh) to guarantee coverage despite transparent areas
+  // They enter at d ~0.08, fully cover by d ~0.12, blur and exit by d ~0.26
+  const petals: BigPetal[] = []
+  // 2 columns x 5 rows, offset to overlap
+  const positions = [
+    { x: -0.1, y: -0.15 }, { x: 0.45, y: -0.10 },
+    { x: -0.05, y: 0.10 }, { x: 0.50, y: 0.15 },
+    { x: -0.1, y: 0.35 }, { x: 0.45, y: 0.38 },
+    { x: -0.05, y: 0.55 }, { x: 0.50, y: 0.58 },
+    { x: -0.1, y: 0.75 }, { x: 0.45, y: 0.78 },
+  ]
+  positions.forEach((pos, i) => {
+    petals.push({
+      src: `/petals/petal-${(i % 7) + 1}.png`,
+      size: 800 + (i % 3) * 200, // 800-1200px
+      gridX: pos.x,
+      gridY: pos.y,
+      speed: 0.15 + (i % 3) * 0.05, // very slow drift
+      enterStart: 0.08 + i * 0.003,
+      enterEnd: 0.12 + i * 0.003, // fully on screen, SHARP
+      blurStart: 0.18 + i * 0.004, // start blurring here
+      exitEnd: 0.26 + i * 0.004, // gone
     })
-
-    // === PHASE 4: Close-up curtain (d 0.28-0.42) — 4 huge blurred petals ===
-    // Each covers a QUADRANT of the screen, NOT overlapping each other
-    // Top-left
-    add({ size: 1200, startY: -15, speed: 0.35, enterStart: 0.28, enterEnd: 0.33, exitStart: 0.40, exitEnd: 0.48, blur: 20, swayAmp: 4, swayFreq: 0.2, rotation: 8, zIndex: 10 })
-    // Top-right — starts further right so it covers right side
-    add({ size: 1100, startY: -10, speed: 0.25, enterStart: 0.29, enterEnd: 0.34, exitStart: 0.41, exitEnd: 0.49, blur: 24, swayAmp: 3, swayFreq: 0.15, rotation: 5, zIndex: 10 })
-    // Bottom-left
-    add({ size: 1300, startY: 45, speed: 0.30, enterStart: 0.30, enterEnd: 0.35, exitStart: 0.42, exitEnd: 0.50, blur: 22, swayAmp: 5, swayFreq: 0.25, rotation: 6, zIndex: 10 })
-    // Bottom-right
-    add({ size: 1150, startY: 50, speed: 0.22, enterStart: 0.31, enterEnd: 0.36, exitStart: 0.43, exitEnd: 0.51, blur: 26, swayAmp: 3, swayFreq: 0.18, rotation: 4, zIndex: 10 })
-
-    return petals
-  }, [])
+  })
+  return petals
 }
 
 export default function PetalRibbonSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const charsRef = useRef<(HTMLSpanElement | null)[]>([])
-  const petalsRef = useRef<(HTMLImageElement | null)[]>([])
+  const bigPetalsRef = useRef<(HTMLImageElement | null)[]>([])
   const ribbonBgRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef(0)
+  const petalImagesRef = useRef<HTMLImageElement[]>([])
+  const [imagesLoaded, setImagesLoaded] = useState(false)
 
-  const petalConfigs = usePetalConfigs()
+  const smallPetals = useMemo(() => generateSmallPetals(), [])
+  const bigPetals = useMemo(() => generateBigPetals(), [])
+
+  // Preload petal images for canvas rendering
+  useEffect(() => {
+    let loaded = 0
+    const images: HTMLImageElement[] = []
+    for (let i = 0; i < 7; i++) {
+      const img = new Image()
+      img.src = `/petals/petal-${i + 1}.png`
+      img.onload = () => {
+        loaded++
+        if (loaded === 7) {
+          petalImagesRef.current = images
+          setImagesLoaded(true)
+        }
+      }
+      images.push(img)
+    }
+  }, [])
 
   useEffect(() => {
+    if (!imagesLoaded) return
+
+    // Resize canvas
+    function resizeCanvas() {
+      const canvas = canvasRef.current
+      const container = sectionRef.current?.querySelector('.petal-sticky') as HTMLElement
+      if (!canvas || !container) return
+      const dpr = Math.min(window.devicePixelRatio, 2)
+      canvas.width = container.clientWidth * dpr
+      canvas.height = container.clientHeight * dpr
+      canvas.style.width = container.clientWidth + 'px'
+      canvas.style.height = container.clientHeight + 'px'
+    }
+    resizeCanvas()
+    window.addEventListener('resize', resizeCanvas)
+
     function onScroll() {
       const el = sectionRef.current
       if (!el) return
@@ -122,43 +145,78 @@ export default function PetalRibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // Ribbon bg: fades in ONLY once close-up petals are fully covering (d 0.35-0.45)
+      // === RIBBON BG: instant swap while big petals cover (not a fade) ===
+      // At d=0.13, big petals are fully covering → swap bg to visible
       if (ribbonBgRef.current) {
-        const bgOpacity = clamp((d - 0.35) / 0.10, 0, 1)
-        ribbonBgRef.current.style.opacity = String(bgOpacity)
+        ribbonBgRef.current.style.opacity = d >= 0.13 ? '1' : '0'
       }
 
-      // Petals
-      for (let i = 0; i < petalsRef.current.length; i++) {
-        const petal = petalsRef.current[i]
-        if (!petal) continue
-        const cfg = petalConfigs[i]
+      // === SMALL PETALS on canvas ===
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (ctx && canvas) {
+        const cw = canvas.width
+        const ch = canvas.height
+        ctx.clearRect(0, 0, cw, ch)
 
+        for (let i = 0; i < smallPetals.length; i++) {
+          const p = smallPetals[i]
+          if (d < p.enterStart || d > p.exitEnd) continue
+
+          const lifespan = p.exitEnd - p.enterStart
+          const progress = (d - p.enterStart) / lifespan
+          const fadeIn = clamp(progress / 0.2, 0, 1)
+          const fadeOut = clamp((1 - progress) / 0.2, 0, 1)
+          const alpha = fadeIn * fadeOut
+
+          if (alpha < 0.01) continue
+
+          // Position: drift from right to left
+          const x = cw * (1.1 - progress * 1.5 * p.speed)
+          const y = p.startY * ch + Math.sin(progress * p.swayFreq * Math.PI * 4) * p.swayAmp
+          const rot = progress * p.rotation * (Math.PI / 180)
+          const size = p.size * (cw / 1440) // scale to viewport
+
+          const img = petalImagesRef.current[p.imgIdx]
+          if (!img) continue
+
+          ctx.save()
+          ctx.globalAlpha = alpha
+          ctx.translate(x, y)
+          ctx.rotate(rot)
+          ctx.drawImage(img, -size / 2, -size / 2, size, size)
+          ctx.restore()
+        }
+      }
+
+      // === BIG PETALS (DOM) ===
+      for (let i = 0; i < bigPetalsRef.current.length; i++) {
+        const el = bigPetalsRef.current[i]
+        if (!el) continue
+        const cfg = bigPetals[i]
+
+        // Enter phase: sharp, no blur
         const enterP = clamp((d - cfg.enterStart) / (cfg.enterEnd - cfg.enterStart), 0, 1)
-        const exitP = clamp((d - cfg.exitStart) / (cfg.exitEnd - cfg.exitStart), 0, 1)
-        const alpha = enterP * (1 - exitP)
+        // Blur phase: starts blurring
+        const blurP = clamp((d - cfg.blurStart) / (cfg.exitEnd - cfg.blurStart), 0, 1)
 
-        // Travel: petals drift from right (100vw) to left (-40vw)
-        const totalDuration = cfg.exitEnd - cfg.enterStart
-        const combinedProgress = clamp((d - cfg.enterStart) / totalDuration, 0, 1)
-        const petalX = 100 - combinedProgress * 140 * cfg.speed
+        const alpha = enterP * (1 - blurP)
+        const blur = blurP * 30 // heavy blur as they exit
 
-        const swayPhase = combinedProgress * cfg.swayFreq * Math.PI * 4
-        const swayY = Math.sin(swayPhase) * cfg.swayAmp
-        const rot = combinedProgress * cfg.rotation
+        // Minimal horizontal drift
+        const lifeProgress = clamp((d - cfg.enterStart) / (cfg.exitEnd - cfg.enterStart), 0, 1)
+        const driftX = -lifeProgress * 15 * cfg.speed // slight left drift in vw
 
-        const blurAmount = cfg.blur * alpha
-
-        petal.style.transform = `translate(${petalX}vw, ${swayY}px) rotate(${rot}deg)`
-        petal.style.opacity = String(clamp(alpha, 0, 1))
-        petal.style.filter = blurAmount > 0.5 ? `blur(${blurAmount.toFixed(1)}px)` : 'none'
+        el.style.opacity = String(clamp(alpha, 0, 1))
+        el.style.filter = blur > 0.5 ? `blur(${blur.toFixed(0)}px)` : 'none'
+        el.style.transform = `translateX(${driftX}vw)`
       }
 
-      // Heading chars — enter d 0.52-0.72
+      // === HEADING CHARS ===
       for (let i = 0; i < charsRef.current.length; i++) {
         const span = charsRef.current[i]
         if (!span) continue
-        const charStart = 0.52 + i * 0.003
+        const charStart = 0.50 + i * 0.003
         const charEnd = charStart + 0.06
         const enterP = clamp((d - charStart) / (charEnd - charStart), 0, 1)
         const easedEnter = cubicBezier(0.12, 1, 0.72, 1, enterP)
@@ -169,21 +227,19 @@ export default function PetalRibbonSection() {
         const easedExit = cubicBezier(0.45, 0, 0.55, 1, exitP)
 
         const opacity = easedEnter * (1 - easedExit)
-        const blurIn = (1 - easedEnter) * 16
-        const blurOut = easedExit * 12
-        const yIn = (1 - easedEnter) * 10
-        const yOut = easedExit * -14
-
         span.style.opacity = String(opacity)
-        span.style.filter = `blur(${(blurIn + blurOut).toFixed(1)}px)`
-        span.style.transform = `translateY(${yIn + yOut}px)`
+        span.style.filter = `blur(${((1 - easedEnter) * 16 + easedExit * 12).toFixed(1)}px)`
+        span.style.transform = `translateY(${(1 - easedEnter) * 10 + easedExit * -14}px)`
       }
     }
 
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [petalConfigs])
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', resizeCanvas)
+    }
+  }, [imagesLoaded, smallPetals, bigPetals])
 
   const chars = useMemo(() => HEADING.split(''), [])
 
@@ -194,6 +250,7 @@ export default function PetalRibbonSection() {
       style={{ height: '280vh', position: 'relative' }}
     >
       <div
+        className="petal-sticky"
         style={{
           position: 'sticky',
           top: 0,
@@ -202,10 +259,10 @@ export default function PetalRibbonSection() {
           background: 'var(--color-bg)',
         }}
       >
-        {/* Ribbon bg — only visible after close-up petals cover screen */}
+        {/* Ribbon bg — instant swap, no fade */}
         <div
           ref={ribbonBgRef}
-          style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0 }}
+          style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0, transition: 'none' }}
         >
           <img
             src="/ribbon-bg.jpg"
@@ -215,38 +272,48 @@ export default function PetalRibbonSection() {
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(8, 5, 2, 0.55)' }} />
         </div>
 
-        {/* Petals */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
-          {petalConfigs.map((cfg, i) => (
+        {/* Small petals canvas */}
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Big close-up petals (DOM for CSS blur) */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none', overflow: 'hidden' }}>
+          {bigPetals.map((cfg, i) => (
             <img
               key={i}
-              ref={(el) => { petalsRef.current[i] = el }}
+              ref={(el) => { bigPetalsRef.current[i] = el }}
               src={cfg.src}
               alt=""
               style={{
                 position: 'absolute',
-                top: `${cfg.startY}%`,
-                left: 0,
+                left: `${cfg.gridX * 100}%`,
+                top: `${cfg.gridY * 100}%`,
                 width: cfg.size,
                 height: 'auto',
                 opacity: 0,
                 pointerEvents: 'none',
                 willChange: 'transform, opacity, filter',
-                zIndex: cfg.zIndex,
               }}
             />
           ))}
         </div>
 
         {/* Three.js Ribbon */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 6, pointerEvents: 'none' }}>
           <ThreeRibbon progressRef={progressRef} />
         </div>
 
         {/* Heading */}
         <div
           style={{
-            position: 'absolute', inset: 0, zIndex: 4,
+            position: 'absolute', inset: 0, zIndex: 7,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             pointerEvents: 'none',
           }}
