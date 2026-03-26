@@ -174,13 +174,12 @@ export default function FizzleCanvas({ sectionRef }: Props) {
       const pastEnd = rect.bottom < 0
 
       if (!approaching || pastEnd) {
-        // Hide canvas entirely when not in range
-        canvas.style.display = 'none'
+        canvas.style.opacity = '0'
         lastProgress = 0
         return
       }
 
-      canvas.style.display = 'block'
+      canvas.style.opacity = '1'
 
       const progress = clamp(-rect.top / (sectionH - vh), 0, 1)
 
@@ -213,7 +212,7 @@ export default function FizzleCanvas({ sectionRef }: Props) {
         height: '100vh',
         zIndex: 10,
         pointerEvents: 'none',
-        display: 'none',
+        opacity: 0,
       }}
     />
   )

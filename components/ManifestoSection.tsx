@@ -47,7 +47,7 @@ export default function ManifestoSection() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '120px 32px 100px',
+        padding: '60px 32px 100px',
       }}
     >
       <div
