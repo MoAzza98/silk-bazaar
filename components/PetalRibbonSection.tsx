@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
-import { clamp, remap } from '@/lib/scrollUtils'
+import { clamp } from '@/lib/scrollUtils'
 import dynamic from 'next/dynamic'
 
 const ThreeRibbon = dynamic(() => import('./ThreeRibbon'), { ssr: false })
@@ -14,19 +14,29 @@ interface PetalConfig {
   startY: number
   speed: number
   yDrift: number
+  swayAmp: number
+  swayFreq: number
+  rotationSpeed: number
+  delay: number
 }
 
 function usePetalConfigs(): PetalConfig[] {
   return useMemo(() => {
     const petals: PetalConfig[] = []
+    // Use seeded-style random for consistent SSR/client
+    const sizes = [100, 140, 180, 220, 260, 300, 160, 200, 120, 280, 150, 240]
     for (let i = 0; i < 12; i++) {
       petals.push({
         src: `/petals/petal-${(i % 7) + 1}.png`,
-        size: 120 + Math.random() * 160,
-        startX: 110 + Math.random() * 30,
-        startY: 10 + Math.random() * 80,
-        speed: 0.7 + Math.random() * 0.6,
-        yDrift: -15 + Math.random() * 30,
+        size: sizes[i],
+        startX: 105 + (i * 7) % 35,
+        startY: 5 + (i * 13) % 85,
+        speed: 0.6 + (i * 0.08),
+        yDrift: -20 + (i * 5) % 40,
+        swayAmp: 15 + (i * 3) % 25,
+        swayFreq: 0.8 + (i * 0.15) % 1.2,
+        rotationSpeed: 40 + (i * 15) % 100,
+        delay: i * 0.02,
       })
     }
     return petals
@@ -37,6 +47,7 @@ export default function PetalRibbonSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const charsRef = useRef<HTMLSpanElement[]>([])
   const petalsRef = useRef<HTMLImageElement[]>([])
+  const ribbonBgRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef(0)
 
   const petalConfigs = usePetalConfigs()
@@ -51,41 +62,58 @@ export default function PetalRibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
+      // ===== PHASE TIMELINE =====
+      // d 0.00 - 0.35: Petals drift in from the right over CREAM background
+      // d 0.35 - 0.50: Petals accumulate, covering screen
+      // d 0.40 - 0.55: ribbon-bg image fades in UNDERNEATH the petals
+      // d 0.50 - 0.72: Petals drift further left and fade out, revealing ribbon-bg
+      // d 0.50 - 0.72: Heading text chars animate in (staggered blur)
+      // d 0.58 - 0.88: Three.js ribbon draws in
+      // d 0.88 - 1.00: Heading chars exit upward
+
+      // Ribbon background opacity: starts at 0, fades in d 0.35-0.55
+      if (ribbonBgRef.current) {
+        const bgOpacity = clamp((d - 0.35) / 0.20, 0, 1)
+        ribbonBgRef.current.style.opacity = String(bgOpacity)
+      }
+
       // Petals
       petalsRef.current.forEach((petal, i) => {
         if (!petal) return
         const cfg = petalConfigs[i]
-        const isEarlyPetal = i < 5
+        const isEarlyPetal = i < 6
 
-        let petalAlpha: number
-        let petalX: number
+        const enterStart = isEarlyPetal ? cfg.delay : 0.15 + cfg.delay
+        const enterEnd = isEarlyPetal ? 0.35 : 0.50
+        const exitStart = 0.50
+        const exitEnd = 0.72
 
-        if (isEarlyPetal) {
-          // Phase 1-2 petals: enter d 0-0.35
-          const enterProgress = clamp(d / 0.35, 0, 1)
-          const exitProgress = clamp((d - 0.5) / 0.22, 0, 1)
-          petalAlpha = enterProgress * (1 - exitProgress)
-          petalX = cfg.startX - enterProgress * cfg.startX * cfg.speed
-        } else {
-          // Phase 2 petals: enter d 0.2-0.5
-          const enterProgress = clamp((d - 0.2) / 0.3, 0, 1)
-          const exitProgress = clamp((d - 0.5) / 0.22, 0, 1)
-          petalAlpha = enterProgress * (1 - exitProgress)
-          petalX = cfg.startX - enterProgress * cfg.startX * cfg.speed
-        }
+        const enterProgress = clamp((d - enterStart) / (enterEnd - enterStart), 0, 1)
+        const exitProgress = clamp((d - exitStart) / (exitEnd - exitStart), 0, 1)
+        const petalAlpha = enterProgress * (1 - exitProgress)
 
-        const yOffset = cfg.yDrift * clamp(d * 2, 0, 1)
-        petal.style.transform = `translate(${petalX}vw, ${yOffset}px) rotate(${d * 120 * cfg.speed}deg)`
+        // Drift from right to center, then continue left on exit
+        const driftIn = enterProgress * cfg.startX * cfg.speed
+        const driftOut = exitProgress * 40 * cfg.speed
+        const petalX = cfg.startX - driftIn - driftOut
+
+        // Swaying Y motion
+        const swayPhase = d * cfg.swayFreq * Math.PI * 4
+        const swayY = Math.sin(swayPhase) * cfg.swayAmp * enterProgress
+
+        const yBase = cfg.yDrift * enterProgress
+        const rotation = d * cfg.rotationSpeed
+
+        petal.style.transform = `translate(${petalX}vw, ${yBase + swayY}px) rotate(${rotation}deg)`
         petal.style.opacity = String(clamp(petalAlpha, 0, 1))
       })
 
-      // Heading chars — enter phase (d: 0.5 → 0.72)
+      // Heading chars — enter phase (d: 0.50 → 0.72)
       charsRef.current.forEach((span, i) => {
         if (!span) return
-        const charStart = 0.5 + i * 0.003
+        const charStart = 0.50 + i * 0.003
         const charEnd = charStart + 0.06
 
-        // Enter
         const enterP = clamp((d - charStart) / (charEnd - charStart), 0, 1)
         const easedEnter = cubicBezier(0.12, 1, 0.72, 1, enterP)
 
@@ -126,32 +154,41 @@ export default function PetalRibbonSection() {
           top: 0,
           height: '100dvh',
           overflow: 'hidden',
+          background: 'var(--color-bg)',
         }}
       >
-        {/* Background image */}
-        <img
-          src="/ribbon-bg.jpg"
-          alt=""
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            zIndex: 0,
-          }}
-        />
-        {/* Dark overlay */}
+        {/* Ribbon background — starts invisible, fades in during phase 3 */}
         <div
+          ref={ribbonBgRef}
           style={{
             position: 'absolute',
             inset: 0,
-            background: 'rgba(8, 5, 2, 0.55)',
-            zIndex: 1,
+            zIndex: 0,
+            opacity: 0,
           }}
-        />
+        >
+          <img
+            src="/ribbon-bg.jpg"
+            alt=""
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+          {/* Dark overlay on ribbon image */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: 'rgba(8, 5, 2, 0.55)',
+            }}
+          />
+        </div>
 
-        {/* Petals */}
+        {/* Petals — on top of everything during entry, z=2 */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none', overflow: 'hidden' }}>
           {petalConfigs.map((cfg, i) => (
             <img
@@ -166,7 +203,6 @@ export default function PetalRibbonSection() {
                 width: cfg.size,
                 height: 'auto',
                 opacity: 0,
-                mixBlendMode: 'screen',
                 pointerEvents: 'none',
                 willChange: 'transform, opacity',
               }}
@@ -225,7 +261,6 @@ export default function PetalRibbonSection() {
 
 // Simple cubic bezier approximation
 function cubicBezier(x1: number, y1: number, x2: number, y2: number, t: number): number {
-  // Newton-Raphson approximation for cubic bezier
   const cx = 3 * x1
   const bx = 3 * (x2 - x1) - cx
   const ax = 1 - cx - bx

@@ -19,12 +19,12 @@ export default function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
+  const imageWrapRef = useRef<HTMLDivElement>(null)
   const [verbIndex, setVerbIndex] = useState(0)
   const [verbState, setVerbState] = useState<'in' | 'out'>('in')
   const [cardOffset, setCardOffset] = useState(0)
   const [loaded, setLoaded] = useState(false)
 
-  // Load-in animation
   useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 100)
     return () => clearTimeout(t)
@@ -50,15 +50,17 @@ export default function HeroSection() {
     return () => clearInterval(interval)
   }, [])
 
-  // Pixelation scroll effect
+  // Pixelation scroll effect — fires as the image scrolls up under the nav
   const handleScroll = useCallback(() => {
-    const section = sectionRef.current
     const canvas = canvasRef.current
     const img = imgRef.current
-    if (!section || !canvas || !img || !img.complete) return
+    const wrap = imageWrapRef.current
+    if (!canvas || !img || !img.complete || !wrap) return
 
-    const heroScrollBudget = window.innerHeight * 0.8
-    const progress = clamp(window.scrollY / heroScrollBudget, 0, 1)
+    const rect = wrap.getBoundingClientRect()
+    // Progress: 0 when image top is at viewport top, 1 when image bottom reaches viewport top
+    const imageH = rect.height
+    const progress = clamp(-rect.top / imageH, 0, 1)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -74,7 +76,6 @@ export default function HeroSection() {
     const blockSize = Math.max(2, Math.round(4 + progress * 20))
     const threshold = progress * h
 
-    // Draw pixelated portion (top to threshold)
     const smallW = Math.ceil(w / blockSize)
     const smallH = Math.ceil(h / blockSize)
 
@@ -104,11 +105,12 @@ export default function HeroSection() {
   // Resize canvas to match image
   useEffect(() => {
     function resize() {
-      const img = imgRef.current
+      const wrap = imageWrapRef.current
       const canvas = canvasRef.current
-      if (!img || !canvas) return
-      canvas.width = img.clientWidth * (window.devicePixelRatio > 1 ? 2 : 1)
-      canvas.height = img.clientHeight * (window.devicePixelRatio > 1 ? 2 : 1)
+      if (!wrap || !canvas) return
+      const dpr = Math.min(window.devicePixelRatio, 2)
+      canvas.width = wrap.clientWidth * dpr
+      canvas.height = wrap.clientHeight * dpr
     }
     resize()
     window.addEventListener('resize', resize)
@@ -122,20 +124,65 @@ export default function HeroSection() {
       ref={sectionRef}
       style={{
         minHeight: '100vh',
-        paddingBottom: '80vh',
         position: 'relative',
         background: 'var(--color-bg)',
       }}
     >
+      {/* Hero background image — anchored upper-right, bleeds off top & right */}
+      <div
+        ref={imageWrapRef}
+        style={{
+          position: 'absolute',
+          top: -40,
+          right: -40,
+          width: '65%',
+          height: 'calc(100% + 40px)',
+          pointerEvents: 'none',
+        }}
+      >
+        <img
+          ref={imgRef}
+          src="/hero-bg.jpg"
+          alt=""
+          onLoad={() => handleScroll()}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'top right',
+            opacity: 0.92,
+            maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
+            maskComposite: 'intersect',
+            WebkitMaskComposite: 'source-in' as string,
+          }}
+        />
+        <canvas
+          ref={canvasRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            maskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 25%, black 100%), linear-gradient(to bottom, black 0%, black 70%, transparent 100%)',
+            maskComposite: 'intersect',
+            WebkitMaskComposite: 'source-in' as string,
+          }}
+        />
+      </div>
+
       <div
         style={{
           display: 'flex',
           minHeight: '100vh',
           maxWidth: 'var(--max-page)',
           margin: '0 auto',
-          padding: '120px 32px 0',
+          padding: '120px 32px 80px',
           gap: 40,
           position: 'relative',
+          zIndex: 1,
         }}
       >
         {/* Left — query cards */}
@@ -168,54 +215,20 @@ export default function HeroSection() {
           ))}
         </div>
 
-        {/* Right — hero image + headline */}
+        {/* Right — headline overlay (sits on top of image) */}
         <div
           style={{
             width: '60%',
-            position: 'relative',
-            borderRadius: 16,
-            overflow: 'hidden',
-            minHeight: '70vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            paddingRight: '5%',
           }}
           className="hero-image-col"
         >
-          <img
-            ref={imgRef}
-            src="/hero-bg.jpg"
-            alt=""
-            onLoad={() => handleScroll()}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: 0.9,
-              maskImage: 'radial-gradient(ellipse 80% 80% at 60% 50%, black 40%, transparent 85%)',
-              WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 60% 50%, black 40%, transparent 85%)',
-            }}
-          />
-          <canvas
-            ref={canvasRef}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              pointerEvents: 'none',
-              maskImage: 'radial-gradient(ellipse 80% 80% at 60% 50%, black 40%, transparent 85%)',
-              WebkitMaskImage: 'radial-gradient(ellipse 80% 80% at 60% 50%, black 40%, transparent 85%)',
-            }}
-          />
-
-          {/* Headline overlay */}
           <div
             className={`load-fade ${loaded ? 'loaded-in' : ''}`}
             style={{
-              position: 'absolute',
-              top: '50%',
-              right: '10%',
-              transform: 'translateY(-50%)',
               textAlign: 'right',
               transition: 'opacity 1200ms ease, filter 1200ms ease',
             }}
@@ -253,7 +266,7 @@ export default function HeroSection() {
         }
         @media (max-width: 767px) {
           .hero-cards-col { display: none !important; }
-          .hero-image-col { width: 100% !important; }
+          .hero-image-col { width: 100% !important; justify-content: center !important; padding-right: 0 !important; }
           .hero-title { font-size: 52px !important; }
           .hero-verb { font-size: 52px !important; }
           .hero-verb-wrap { height: 60px !important; }

@@ -126,7 +126,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
     const tctx = textCanvas.getContext('2d')!
     tctx.clearRect(0, 0, 4096, 128)
     tctx.fillStyle = '#1a1208'
-    tctx.font = '500 40px DM Mono, Courier New, monospace'
+    tctx.font = '500 40px Geist Mono, Courier New, monospace'
     // Repeat text to fill width
     let textStr = ''
     while (tctx.measureText(textStr).width < 4096) {

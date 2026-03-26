@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --font-display: 'Cormorant Garamond', Georgia, serif;
-  --font-mono: 'DM Mono', 'Courier New', monospace;
+  --font-display: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Courier New', monospace;
 
   --color-bg:            #F9F7F5;
   --color-surface:       #F5EDE4;
