@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { clamp } from '@/lib/scrollUtils'
+import dynamic from 'next/dynamic'
+import type { GlimmerHandle } from './GlimmerEffect'
+
+const GlimmerEffect = dynamic(() => import('./GlimmerEffect'), { ssr: false })
 
 const VERBS = ['discovers', 'surfaces', 'auctions', 'acquires', 'scales', 'connects', 'activates']
 
@@ -15,8 +18,7 @@ const LISTINGS = [
   { body: 'DAO with 2.1M treasury, governance fatigue, needs operator' },
 ]
 
-// Very gradual bleed — fade starts deep inside the image (25-30% in)
-// and transitions slowly to transparent. Big blur radius, organic feel.
+// Edge bleed mask — gradual fade on all sides
 const EDGE_MASK = [
   'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 8%, rgba(0,0,0,0.7) 18%, black 30%, black 70%, rgba(0,0,0,0.7) 82%, rgba(0,0,0,0.3) 92%, transparent 100%)',
   'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 6%, rgba(0,0,0,0.8) 15%, black 28%, black 60%, rgba(0,0,0,0.6) 72%, rgba(0,0,0,0.2) 82%, transparent 90%)',
@@ -24,15 +26,12 @@ const EDGE_MASK = [
 
 export default function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const imgRef = useRef<HTMLImageElement>(null)
-  const imageWrapRef = useRef<HTMLDivElement>(null)
-  const pixelAnimRef = useRef<number | null>(null)
+  const glimmerRef = useRef<GlimmerHandle>(null)
   const [verbIndex, setVerbIndex] = useState(0)
   const [verbState, setVerbState] = useState<'in' | 'out'>('in')
   const [loaded, setLoaded] = useState(false)
 
-  // Card animation using refs for smooth DOM manipulation
+  // Card animation
   const cardTrackRef = useRef<HTMLDivElement>(null)
   const cardBaseRef = useRef(0)
   const [cardBase, setCardBase] = useState(0)
@@ -43,72 +42,7 @@ export default function HeroSection() {
     return () => clearTimeout(t)
   }, [])
 
-  // Pixelation sweep — thick strip, slow, fully exits top
-  const runPixelSweep = useCallback(() => {
-    const canvas = canvasRef.current
-    const img = imgRef.current
-    if (!canvas || !img || !img.complete) return
-
-    const w = canvas.width
-    const h = canvas.height
-    const duration = 1800 // slower
-    const stripHeight = h * 0.35 // much thicker
-    const start = performance.now()
-
-    function animatePixel(now: number) {
-      const currentCtx = canvasRef.current?.getContext('2d')
-      const currentImg = imgRef.current
-      if (!currentCtx || !currentImg) return
-
-      const elapsed = now - start
-      const progress = clamp(elapsed / duration, 0, 1)
-      // Smooth linear with slight ease
-      const eased = progress < 0.3
-        ? (progress / 0.3) * (progress / 0.3) * 0.3
-        : 0.3 + (progress - 0.3) / 0.7 * 0.7
-
-      // Strip travels from below the image to above it (fully exits)
-      // Start: center at h + stripHeight/2 (below image)
-      // End: center at -stripHeight/2 (above image, fully gone)
-      const totalTravel = h + stripHeight
-      const stripCenter = h + stripHeight / 2 - eased * totalTravel
-
-      const top = Math.max(0, stripCenter - stripHeight / 2)
-      const bottom = Math.min(h, stripCenter + stripHeight / 2)
-
-      currentCtx.clearRect(0, 0, w, h)
-
-      if (bottom > top && top < h && bottom > 0) {
-        const blockSize = 8
-        const smallW = Math.ceil(w / blockSize)
-        const smallH = Math.ceil(h / blockSize)
-
-        const offscreen = document.createElement('canvas')
-        offscreen.width = smallW
-        offscreen.height = smallH
-        const offCtx = offscreen.getContext('2d')
-        if (!offCtx) { pixelAnimRef.current = requestAnimationFrame(animatePixel); return }
-        offCtx.drawImage(currentImg, 0, 0, smallW, smallH)
-
-        currentCtx.save()
-        currentCtx.beginPath()
-        currentCtx.rect(0, top, w, bottom - top)
-        currentCtx.clip()
-        currentCtx.imageSmoothingEnabled = false
-        currentCtx.drawImage(offscreen, 0, 0, w, h)
-        currentCtx.restore()
-      }
-
-      if (progress < 1) {
-        pixelAnimRef.current = requestAnimationFrame(animatePixel)
-      }
-    }
-
-    if (pixelAnimRef.current) cancelAnimationFrame(pixelAnimRef.current)
-    pixelAnimRef.current = requestAnimationFrame(animatePixel)
-  }, [])
-
-  // Card slide using direct DOM manipulation for smoothness
+  // Card slide
   const slideCards = useCallback(() => {
     if (slidingRef.current) return
     slidingRef.current = true
@@ -119,37 +53,29 @@ export default function HeroSection() {
     const cards = track.children
     if (cards.length < 4) { slidingRef.current = false; return }
 
-    // Measure the first card height
     const firstCard = cards[0] as HTMLElement
-    const cardH = firstCard.offsetHeight + 6 // + gap
+    const cardH = firstCard.offsetHeight + 6
 
-    // Apply slide transition
     track.style.transition = 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1)'
     track.style.transform = `translateY(-${cardH}px)`
 
-    // Fade/blur the exiting top card
     const exitCard = cards[0] as HTMLElement
     exitCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
     exitCard.style.opacity = '0'
     exitCard.style.filter = 'blur(6px)'
 
-    // Fade in the entering bottom card
     const enterCard = cards[3] as HTMLElement
     enterCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
     enterCard.style.opacity = '1'
     enterCard.style.filter = 'blur(0px)'
 
-    // After animation completes, snap state
     setTimeout(() => {
-      // Reset track position without transition
       track.style.transition = 'none'
       track.style.transform = 'translateY(0)'
 
-      // Update React state to shift the window
       cardBaseRef.current = (cardBaseRef.current + 1) % LISTINGS.length
       setCardBase(cardBaseRef.current)
 
-      // Reset card styles
       requestAnimationFrame(() => {
         const newCards = track.children
         for (let i = 0; i < newCards.length; i++) {
@@ -163,11 +89,11 @@ export default function HeroSection() {
     }, 950)
   }, [])
 
-  // Verb rotation + card slide + pixelation
+  // Verb rotation + glimmer morph + card slide — all in lockstep
   useEffect(() => {
     const interval = setInterval(() => {
       setVerbState('out')
-      runPixelSweep()
+      glimmerRef.current?.morph()
       slideCards()
 
       setTimeout(() => {
@@ -176,24 +102,8 @@ export default function HeroSection() {
       }, 600)
     }, 3000)
     return () => clearInterval(interval)
-  }, [runPixelSweep, slideCards])
+  }, [slideCards])
 
-  // Resize canvas
-  useEffect(() => {
-    function resize() {
-      const wrap = imageWrapRef.current
-      const canvas = canvasRef.current
-      if (!wrap || !canvas) return
-      const dpr = Math.min(window.devicePixelRatio, 2)
-      canvas.width = wrap.clientWidth * dpr
-      canvas.height = wrap.clientHeight * dpr
-    }
-    resize()
-    window.addEventListener('resize', resize)
-    return () => window.removeEventListener('resize', resize)
-  }, [loaded])
-
-  // 4 card indices: 3 visible + 1 hidden entering from bottom
   const cardIndices = [0, 1, 2, 3].map((i) => (cardBase + i) % LISTINGS.length)
 
   return (
@@ -205,9 +115,8 @@ export default function HeroSection() {
         background: 'var(--color-bg)',
       }}
     >
-      {/* Hero image — ~85% of viewport, slightly left of center, deep gradual bleed */}
+      {/* Hero image — rendered through Three.js glimmer shader */}
       <div
-        ref={imageWrapRef}
         style={{
           position: 'absolute',
           top: -20,
@@ -215,38 +124,14 @@ export default function HeroSection() {
           width: '88%',
           height: 'calc(100% + 40px)',
           pointerEvents: 'none',
+          opacity: 0.9,
+          maskImage: EDGE_MASK,
+          WebkitMaskImage: EDGE_MASK,
+          maskComposite: 'intersect',
+          WebkitMaskComposite: 'source-in' as string,
         }}
       >
-        <img
-          ref={imgRef}
-          src="/hero-bg.jpg"
-          alt=""
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'center',
-            opacity: 0.9,
-            maskImage: EDGE_MASK,
-            WebkitMaskImage: EDGE_MASK,
-            maskComposite: 'intersect',
-            WebkitMaskComposite: 'source-in' as string,
-          }}
-        />
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            pointerEvents: 'none',
-            maskImage: EDGE_MASK,
-            WebkitMaskImage: EDGE_MASK,
-            maskComposite: 'intersect',
-            WebkitMaskComposite: 'source-in' as string,
-          }}
-        />
+        <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.jpg" />
       </div>
 
       <div
@@ -352,7 +237,6 @@ export default function HeroSection() {
             >
               Silk Bazaar
             </div>
-            {/* Taller container so descenders and tall letters aren't clipped */}
             <div style={{ position: 'relative', height: 110, overflow: 'hidden' }} className="hero-verb-wrap">
               <span
                 key={verbIndex}
