@@ -212,11 +212,7 @@ export default function PetalRibbonSection() {
         const fadeOut = clamp((1 - lifeP) / 0.15, 0, 1)
         let alpha = fadeIn * fadeOut
 
-        // Edge fade: fade when approaching left or right screen edges
-        // xPos is in vw units. Fade within 15vw of either edge
-        const edgeFadeR = clamp((100 - xPos) / 15, 0, 1) // entering from right
-        const edgeFadeL = clamp((xPos + 20) / 15, 0, 1)  // exiting left (account for petal width)
-        alpha *= edgeFadeR * edgeFadeL
+        // Big petals are exempt from edge fading — they should cover the full screen
 
         // Blur: starts at blurStartRatio through the lifespan
         const blurP = clamp((lifeP - cfg.blurStartRatio) / (1 - cfg.blurStartRatio), 0, 1)
