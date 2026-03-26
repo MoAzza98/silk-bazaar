@@ -8,36 +8,112 @@ const RIBBON_TEXT =
 
 interface Props {
   progressRef: MutableRefObject<number>
+  backRef: React.RefObject<HTMLDivElement | null>
+  frontRef: React.RefObject<HTMLDivElement | null>
 }
 
-export default function ThreeRibbon({ progressRef }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null)
+// Vertex shader — passes worldZ for front/back splitting
+const VERT = `
+  varying float v_worldZ;
+  varying vec2 v_uv;
+  void main() {
+    v_uv = uv;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    v_worldZ = worldPos.z;
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`
 
+// Glass ribbon fragment — white surface with edge feathering
+function glassFragment(isFront: boolean) {
+  const discard = isFront ? 'if (v_worldZ <= 0.0) discard;' : 'if (v_worldZ > 0.0) discard;'
+  return `
+    precision mediump float;
+    uniform float u_opacity;
+    uniform float u_head;
+    uniform float u_tail;
+    uniform float u_max_u;
+    uniform float u_fade_w;
+    varying float v_worldZ;
+    varying vec2 v_uv;
+    void main() {
+      ${discard}
+      float p = v_uv.x / u_max_u;
+      if (u_head <= u_tail || p < u_tail || p > u_head) discard;
+      float edge = smoothstep(0.0, 0.24, v_uv.y) * smoothstep(1.0, 0.76, v_uv.y);
+      float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
+                    * smoothstep(u_head, u_head - u_fade_w, p);
+      gl_FragColor = vec4(1.0, 1.0, 1.0, u_opacity * edge * tipFade);
+    }
+  `
+}
+
+// Text ribbon fragment — samples texture, mirrors UV on back face
+function textFragment(isFront: boolean) {
+  const discard = isFront ? 'if (v_worldZ <= 0.0) discard;' : 'if (v_worldZ > 0.0) discard;'
+  return `
+    precision mediump float;
+    uniform sampler2D u_map;
+    uniform float u_offset;
+    uniform float u_head;
+    uniform float u_tail;
+    uniform float u_max_u;
+    uniform float u_fade_w;
+    varying float v_worldZ;
+    varying vec2 v_uv;
+    void main() {
+      ${discard}
+      float p = v_uv.x / u_max_u;
+      if (u_head <= u_tail || p < u_tail || p > u_head) discard;
+      float x = gl_FrontFacing ? v_uv.x + u_offset : (u_max_u - v_uv.x) - u_offset;
+      vec4 texColor = texture2D(u_map, vec2(mod(x, u_max_u) / u_max_u, v_uv.y));
+      float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
+                    * smoothstep(u_head, u_head - u_fade_w, p);
+      gl_FragColor = vec4(texColor.rgb, texColor.a * tipFade);
+    }
+  `
+}
+
+export default function ThreeRibbon({ progressRef, backRef, frontRef }: Props) {
   useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
+    const backContainer = backRef.current
+    const frontContainer = frontRef.current
+    if (!backContainer || !frontContainer) return
 
-    const width = container.clientWidth
-    const height = container.clientHeight
+    const width = backContainer.clientWidth
+    const height = backContainer.clientHeight
     if (width === 0 || height === 0) return
 
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    renderer.setClearAlpha(0)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(width, height)
-    container.appendChild(renderer.domElement)
+    // Two renderers — back and front
+    function createRenderer(container: HTMLDivElement) {
+      const r = new THREE.WebGLRenderer({ alpha: true, antialias: true })
+      r.setClearAlpha(0)
+      r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      r.setSize(width, height)
+      r.domElement.style.position = 'absolute'
+      r.domElement.style.top = '0'
+      r.domElement.style.left = '0'
+      r.domElement.style.width = '100%'
+      r.domElement.style.height = '100%'
+      container.appendChild(r.domElement)
+      return r
+    }
 
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 100)
-    camera.position.set(0, 0, 5.0)
+    const backRenderer = createRenderer(backContainer)
+    const frontRenderer = createRenderer(frontContainer)
+
+    // Shared camera
+    const aspect = width / height
+    const camera = new THREE.PerspectiveCamera(45, aspect, 0.01, 200)
+    camera.position.set(0, 0, 14)
     camera.lookAt(0, 0, 0)
 
-    // ===== ELEGANT FLOWING RIBBON — spaced-out swirls, readable text =====
-    const segments = 800
-    const turns = 2.5         // enough for 3-4 visible bands
-    const radius = 1.0        // spans most of screen width at this camera distance
-    const helixHeight = 8.0   // very tall — loops spaced far apart vertically
-    const ribbonWidth = 0.22  // wide enough to read, thin enough not to overlap
+    // Build helix geometry
+    const segments = 400
+    const numTurns = 4
+    const radius = 8
+    const helixHeight = 36
+    const strandWidth = 2
 
     const positions: number[] = []
     const uvs: number[] = []
@@ -45,18 +121,16 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
     const helixPoints: THREE.Vector3[] = []
     const tangents: THREE.Vector3[] = []
-    const binormals: THREE.Vector3[] = []
 
     for (let i = 0; i <= segments; i++) {
       const t = i / segments
-      const angle = t * Math.PI * 2 * turns
+      const angle = t * Math.PI * 2 * numTurns
       const x = radius * Math.cos(angle)
-      const y = (t - 0.5) * helixHeight
+      const y = helixHeight * t - helixHeight / 2
       const z = radius * Math.sin(angle)
       helixPoints.push(new THREE.Vector3(x, y, z))
     }
 
-    // Tangents
     for (let i = 0; i <= segments; i++) {
       let tang: THREE.Vector3
       if (i === 0) tang = new THREE.Vector3().subVectors(helixPoints[1], helixPoints[0]).normalize()
@@ -65,37 +139,31 @@ export default function ThreeRibbon({ progressRef }: Props) {
       tangents.push(tang)
     }
 
-    // Binormals — ribbon face tilted toward camera
+    // Width direction: cross(radial, tangent)
+    const arcLengths: number[] = [0]
     for (let i = 0; i <= segments; i++) {
       const t = i / segments
-      const angle = t * Math.PI * 2 * turns
-      const outward = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize()
-      const b = new THREE.Vector3().crossVectors(tangents[i], outward).normalize()
-      if (b.length() < 0.001) b.set(0, 0, 1)
-      binormals.push(b)
-    }
+      const angle = t * Math.PI * 2 * numTurns
+      const radial = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize()
+      const widthDir = new THREE.Vector3().crossVectors(radial, tangents[i]).normalize()
 
-    // Arc lengths
-    const arcLengths: number[] = [0]
-    for (let i = 1; i <= segments; i++) {
-      arcLengths.push(arcLengths[i - 1] + helixPoints[i].distanceTo(helixPoints[i - 1]))
-    }
-    const totalArcLength = arcLengths[segments]
-
-    // Build ribbon mesh
-    for (let i = 0; i <= segments; i++) {
       const p = helixPoints[i]
-      const b = binormals[i]
-      positions.push(p.x - b.x * ribbonWidth, p.y - b.y * ribbonWidth, p.z - b.z * ribbonWidth)
-      uvs.push(arcLengths[i], 0)
-      positions.push(p.x + b.x * ribbonWidth, p.y + b.y * ribbonWidth, p.z + b.z * ribbonWidth)
-      uvs.push(arcLengths[i], 1)
+      const hw = strandWidth / 2
+
+      positions.push(p.x + widthDir.x * hw, p.y + widthDir.y * hw, p.z + widthDir.z * hw)
+      positions.push(p.x - widthDir.x * hw, p.y - widthDir.y * hw, p.z - widthDir.z * hw)
+
+      if (i > 0) arcLengths.push(arcLengths[i - 1] + helixPoints[i].distanceTo(helixPoints[i - 1]))
+      const u = arcLengths[i] * (1 / aspect)
+      uvs.push(u, 0)
+      uvs.push(u, 1)
     }
+    const maxU = arcLengths[segments] * (1 / aspect)
 
     for (let i = 0; i < segments; i++) {
-      const a = i * 2, b = a + 1, c = a + 2, dd = a + 3
+      const a = i * 2, b = a + 1, c = a + 2, d = a + 3
       indices.push(a, b, c)
-      indices.push(b, dd, c)
+      indices.push(b, d, c)
     }
 
     const geometry = new THREE.BufferGeometry()
@@ -104,163 +172,137 @@ export default function ThreeRibbon({ progressRef }: Props) {
     geometry.setIndex(indices)
     geometry.computeVertexNormals()
 
-    // Text texture — larger for readability at close range
+    // Text texture
     const textCanvas = document.createElement('canvas')
     textCanvas.width = 4096
-    textCanvas.height = 256
+    textCanvas.height = 128
     const tctx = textCanvas.getContext('2d')!
-    tctx.clearRect(0, 0, 4096, 256)
+    tctx.clearRect(0, 0, 4096, 128)
     tctx.fillStyle = '#1a1208'
-    tctx.font = '500 64px Geist Mono, Courier New, monospace'
+    tctx.font = '500 40px Geist Mono, monospace'
     let textStr = ''
     while (tctx.measureText(textStr).width < 8192) textStr += RIBBON_TEXT
-    tctx.fillText(textStr, 0, 160)
-
+    tctx.fillText(textStr, 0, 88)
     const texture = new THREE.CanvasTexture(textCanvas)
     texture.wrapS = THREE.RepeatWrapping
 
-    const vertexShader = `
-      varying vec2 v_uv;
-      void main() {
-        v_uv = uv;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `
-
-    // Glass strand
-    const glassUniforms = {
-      u_opacity: { value: 0.92 },
-      u_head: { value: 0.0 },
-      u_tail: { value: 0.0 },
-      u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.04 },
-    }
-
-    const glassMaterial = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: `
-        precision mediump float;
-        uniform float u_opacity;
-        uniform float u_head;
-        uniform float u_tail;
-        uniform float u_max_u;
-        uniform float u_fade_w;
-        varying vec2 v_uv;
-        void main() {
-          float p = v_uv.x / u_max_u;
-          if (u_head <= u_tail || p < u_tail || p > u_head) discard;
-          float edge = smoothstep(0.0, 0.04, v_uv.y) * smoothstep(1.0, 0.96, v_uv.y);
-          float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
-                        * smoothstep(u_head, u_head - u_fade_w, p);
-          gl_FragColor = vec4(0.98, 0.97, 0.95, u_opacity * edge * tipFade);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      uniforms: glassUniforms,
-    })
-
-    const glassMesh = new THREE.Mesh(geometry, glassMaterial)
-
-    // Text strand
-    const textUniforms = {
+    // Shared uniforms
+    const sharedUniforms = {
+      u_head: { value: 0 },
+      u_tail: { value: 0 },
+      u_max_u: { value: maxU },
+      u_fade_w: { value: 0.12 },
+      u_opacity: { value: 0.88 },
+      u_offset: { value: 0 },
       u_map: { value: texture },
-      u_offset: { value: 0.0 },
-      u_head: { value: 0.0 },
-      u_tail: { value: 0.0 },
-      u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.04 },
     }
 
-    const textMaterial = new THREE.ShaderMaterial({
-      vertexShader,
-      fragmentShader: `
-        precision mediump float;
-        uniform sampler2D u_map;
-        uniform float u_offset;
-        uniform float u_head;
-        uniform float u_tail;
-        uniform float u_max_u;
-        uniform float u_fade_w;
-        varying vec2 v_uv;
-        void main() {
-          float p = v_uv.x / u_max_u;
-          if (u_head <= u_tail || p < u_tail || p > u_head) discard;
-          float x = gl_FrontFacing ? v_uv.x + u_offset : v_uv.x - u_offset;
-          vec4 texColor = texture2D(u_map, vec2(mod(x, u_max_u) / u_max_u, v_uv.y));
-          float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
-                        * smoothstep(u_head, u_head - u_fade_w, p);
-          gl_FragColor = vec4(texColor.rgb, texColor.a * tipFade);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-      uniforms: textUniforms,
-    })
+    function createScene(isFront: boolean) {
+      const scene = new THREE.Scene()
+      const group = new THREE.Group()
 
-    const textMesh = new THREE.Mesh(geometry, textMaterial)
+      // Glass mesh
+      const glassMat = new THREE.ShaderMaterial({
+        vertexShader: VERT,
+        fragmentShader: glassFragment(isFront),
+        transparent: true, side: THREE.DoubleSide, depthWrite: false,
+        uniforms: {
+          u_opacity: sharedUniforms.u_opacity,
+          u_head: sharedUniforms.u_head,
+          u_tail: sharedUniforms.u_tail,
+          u_max_u: sharedUniforms.u_max_u,
+          u_fade_w: sharedUniforms.u_fade_w,
+        },
+      })
+      group.add(new THREE.Mesh(geometry, glassMat))
 
-    const group = new THREE.Group()
-    group.add(glassMesh)
-    group.add(textMesh)
-    group.rotation.x = -0.1
-    scene.add(group)
+      // Text mesh
+      const textMat = new THREE.ShaderMaterial({
+        vertexShader: VERT,
+        fragmentShader: textFragment(isFront),
+        transparent: true, side: THREE.DoubleSide, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -1,
+        uniforms: {
+          u_map: sharedUniforms.u_map,
+          u_offset: sharedUniforms.u_offset,
+          u_head: sharedUniforms.u_head,
+          u_tail: sharedUniforms.u_tail,
+          u_max_u: sharedUniforms.u_max_u,
+          u_fade_w: sharedUniforms.u_fade_w,
+        },
+      })
+      group.add(new THREE.Mesh(geometry, textMat))
 
-    const isMobile = width < 768
-    const rotationMultiplier = isMobile ? Math.PI * 0.5 : Math.PI * 0.8
+      scene.add(group)
+      return { scene, group }
+    }
+
+    const back = createScene(false)
+    const front = createScene(true)
+
+    // Animation constants
+    const sweepDistance = 40
+    const rotationSpeed = Math.PI * 1.5
+    const textureScrollSpeed = 3
 
     let animId: number
+    let lastD = -1
+
     function tick() {
       animId = requestAnimationFrame(tick)
-
       const d = progressRef.current
+      if (Math.abs(d - lastD) < 0.0001) return
+      lastD = d
 
-      // Gradually unfurl: draw-in over d 0.50→0.78, erase over d 0.80→0.96
-      const headVal = clamp((d - 0.50) / 0.28, 0, 1)
-      const tailVal = clamp((d - 0.80) / 0.16, 0, 1)
+      // Vertical sweep
+      const sweepY = -sweepDistance / 2 + d * sweepDistance
+      back.group.position.y = sweepY
+      front.group.position.y = sweepY
 
-      glassUniforms.u_head.value = headVal
-      glassUniforms.u_tail.value = tailVal
-      textUniforms.u_head.value = headVal
-      textUniforms.u_tail.value = tailVal
-      textUniforms.u_offset.value = -d * 1.5
+      // Rotation
+      back.group.rotation.y = d * rotationSpeed
+      front.group.rotation.y = d * rotationSpeed
 
-      // Gentle rotation over the full ribbon lifetime
-      const rotationD = clamp((d - 0.48) / 0.48, 0, 1)
-      group.rotation.y = rotationD * rotationMultiplier
+      // Draw-in: head 0→1 in first 32%
+      let head = 0
+      if (d > 0 && d <= 0.32) head = d / 0.32
+      else if (d > 0.32) head = 1
 
-      renderer.render(scene, camera)
+      // Erase: tail 0→1 in last 36% (64%→100%)
+      let tail = 0
+      if (d > 0.64) tail = (d - 0.64) / 0.36
+
+      sharedUniforms.u_head.value = head
+      sharedUniforms.u_tail.value = tail
+      sharedUniforms.u_offset.value = -d * textureScrollSpeed
+
+      backRenderer.render(back.scene, camera)
+      frontRenderer.render(front.scene, camera)
     }
     tick()
 
     function onResize() {
-      if (!container) return
-      const w = container.clientWidth
-      const h = container.clientHeight
+      if (!backContainer) return
+      const w = backContainer.clientWidth
+      const h = backContainer.clientHeight
       camera.aspect = w / h
       camera.updateProjectionMatrix()
-      renderer.setSize(w, h)
+      backRenderer.setSize(w, h)
+      frontRenderer.setSize(w, h)
     }
     window.addEventListener('resize', onResize)
 
     return () => {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', onResize)
-      renderer.dispose()
+      backRenderer.dispose()
+      frontRenderer.dispose()
       geometry.dispose()
-      glassMaterial.dispose()
-      textMaterial.dispose()
       texture.dispose()
-      if (container.contains(renderer.domElement)) container.removeChild(renderer.domElement)
+      if (backContainer.contains(backRenderer.domElement)) backContainer.removeChild(backRenderer.domElement)
+      if (frontContainer.contains(frontRenderer.domElement)) frontContainer.removeChild(frontRenderer.domElement)
     }
-  }, [progressRef])
+  }, [progressRef, backRef, frontRef])
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ width: '100%', height: '100%', background: 'transparent' }}
-    />
-  )
+  return null // renders into the ref'd containers
 }

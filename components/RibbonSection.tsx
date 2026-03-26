@@ -1,16 +1,16 @@
 'use client'
 import { useEffect, useRef, useMemo } from 'react'
 import { clamp } from '@/lib/scrollUtils'
-import dynamic from 'next/dynamic'
+import ThreeRibbon from './ThreeRibbon'
 import FizzleCanvas from './FizzleCanvas'
-
-const ThreeRibbon = dynamic(() => import('./ThreeRibbon'), { ssr: false })
 
 const HEADING = 'Silk Bazaar surfaces.'
 
 export default function RibbonSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const charsRef = useRef<(HTMLSpanElement | null)[]>([])
+  const helixBackRef = useRef<HTMLDivElement>(null)
+  const helixFrontRef = useRef<HTMLDivElement>(null)
   const progressRef = useRef(0)
   const fizzleProgressRef = useRef(0)
 
@@ -24,8 +24,7 @@ export default function RibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // Fizzle dissolve: happens in the first 30% of scroll progress
-      // Maps d 0→0.3 to fizzle 0→1
+      // Fizzle dissolve in first 30%
       fizzleProgressRef.current = clamp(d / 0.3, 0, 1)
 
       // Heading chars — enter d 0.35-0.55, exit d 0.80-0.95
@@ -66,11 +65,11 @@ export default function RibbonSection() {
         style={{
           position: 'sticky',
           top: 0,
-          height: '100dvh',
+          height: '100vh',
           overflow: 'hidden',
         }}
       >
-        {/* Background image + dark overlay */}
+        {/* z:0 — Background image */}
         <img
           src="/ribbon-bg.jpg"
           alt=""
@@ -83,6 +82,7 @@ export default function RibbonSection() {
             zIndex: 0,
           }}
         />
+        {/* z:1 — Dark overlay */}
         <div
           style={{
             position: 'absolute',
@@ -92,17 +92,23 @@ export default function RibbonSection() {
           }}
         />
 
-        {/* Three.js Ribbon */}
-        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }}>
-          <ThreeRibbon progressRef={progressRef} />
-        </div>
+        {/* z:4 — Helix BACK half (behind text) */}
+        <div
+          ref={helixBackRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 4,
+            pointerEvents: 'none',
+          }}
+        />
 
-        {/* Heading */}
+        {/* z:5 — Heading text (sandwiched between ribbon halves) */}
         <div
           style={{
             position: 'absolute',
             inset: 0,
-            zIndex: 3,
+            zIndex: 5,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -131,8 +137,26 @@ export default function RibbonSection() {
           </h2>
         </div>
 
-        {/* Fizzle dissolve overlay — sits INSIDE the sticky container */}
+        {/* z:6 — Helix FRONT half (in front of text) */}
+        <div
+          ref={helixFrontRef}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 6,
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* z:8 — Fizzle dissolve overlay */}
         <FizzleCanvas progressRef={fizzleProgressRef} />
+
+        {/* Three.js ribbon — renders into back/front containers */}
+        <ThreeRibbon
+          progressRef={progressRef}
+          backRef={helixBackRef}
+          frontRef={helixFrontRef}
+        />
       </div>
 
       <style>{`
