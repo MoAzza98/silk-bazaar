@@ -15,6 +15,13 @@ const LISTINGS = [
   { body: 'DAO with 2.1M treasury, governance fatigue, needs operator' },
 ]
 
+// Edge-only bleed: fade on all 4 edges, but keep the center fully visible
+// Composited linear gradients for each edge
+const EDGE_MASK = [
+  'linear-gradient(to right, transparent, black 12%, black 88%, transparent)',
+  'linear-gradient(to bottom, transparent, black 8%, black 85%, transparent)',
+].join(', ')
+
 export default function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -25,16 +32,18 @@ export default function HeroSection() {
   const [verbState, setVerbState] = useState<'in' | 'out'>('in')
   const [loaded, setLoaded] = useState(false)
 
-  // Card system: render 4 cards, slide them up as a group
+  // Card animation using refs for smooth DOM manipulation
+  const cardTrackRef = useRef<HTMLDivElement>(null)
+  const cardBaseRef = useRef(0)
   const [cardBase, setCardBase] = useState(0)
-  const [slidePhase, setSlidePhase] = useState<'idle' | 'sliding'>('idle')
+  const slidingRef = useRef(false)
 
   useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 100)
     return () => clearTimeout(t)
   }, [])
 
-  // Pixelation sweep — strip moves UP, takes 1.2 seconds
+  // Pixelation sweep — thick strip, slow, fully exits top
   const runPixelSweep = useCallback(() => {
     const canvas = canvasRef.current
     const img = imgRef.current
@@ -42,8 +51,8 @@ export default function HeroSection() {
 
     const w = canvas.width
     const h = canvas.height
-    const duration = 1200
-    const stripHeight = h * 0.15
+    const duration = 1800 // slower
+    const stripHeight = h * 0.35 // much thicker
     const start = performance.now()
 
     function animatePixel(now: number) {
@@ -53,20 +62,24 @@ export default function HeroSection() {
 
       const elapsed = now - start
       const progress = clamp(elapsed / duration, 0, 1)
-      // Smooth ease-in-out
-      const eased = progress < 0.5
-        ? 2 * progress * progress
-        : 1 - Math.pow(-2 * progress + 2, 2) / 2
+      // Smooth linear with slight ease
+      const eased = progress < 0.3
+        ? (progress / 0.3) * (progress / 0.3) * 0.3
+        : 0.3 + (progress - 0.3) / 0.7 * 0.7
 
-      // Strip moves from bottom to top
-      const stripCenter = h * (1 - eased)
+      // Strip travels from below the image to above it (fully exits)
+      // Start: center at h + stripHeight/2 (below image)
+      // End: center at -stripHeight/2 (above image, fully gone)
+      const totalTravel = h + stripHeight
+      const stripCenter = h + stripHeight / 2 - eased * totalTravel
+
       const top = Math.max(0, stripCenter - stripHeight / 2)
       const bottom = Math.min(h, stripCenter + stripHeight / 2)
 
       currentCtx.clearRect(0, 0, w, h)
 
-      if (bottom > top) {
-        const blockSize = 10
+      if (bottom > top && top < h && bottom > 0) {
+        const blockSize = 8
         const smallW = Math.ceil(w / blockSize)
         const smallH = Math.ceil(h / blockSize)
 
@@ -95,26 +108,75 @@ export default function HeroSection() {
     pixelAnimRef.current = requestAnimationFrame(animatePixel)
   }, [])
 
-  // Verb rotation + card slide
+  // Card slide using direct DOM manipulation for smoothness
+  const slideCards = useCallback(() => {
+    if (slidingRef.current) return
+    slidingRef.current = true
+
+    const track = cardTrackRef.current
+    if (!track) { slidingRef.current = false; return }
+
+    const cards = track.children
+    if (cards.length < 4) { slidingRef.current = false; return }
+
+    // Measure the first card height
+    const firstCard = cards[0] as HTMLElement
+    const cardH = firstCard.offsetHeight + 6 // + gap
+
+    // Apply slide transition
+    track.style.transition = 'transform 900ms cubic-bezier(0.22, 1, 0.36, 1)'
+    track.style.transform = `translateY(-${cardH}px)`
+
+    // Fade/blur the exiting top card
+    const exitCard = cards[0] as HTMLElement
+    exitCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
+    exitCard.style.opacity = '0'
+    exitCard.style.filter = 'blur(6px)'
+
+    // Fade in the entering bottom card
+    const enterCard = cards[3] as HTMLElement
+    enterCard.style.transition = 'opacity 800ms ease, filter 800ms ease'
+    enterCard.style.opacity = '1'
+    enterCard.style.filter = 'blur(0px)'
+
+    // After animation completes, snap state
+    setTimeout(() => {
+      // Reset track position without transition
+      track.style.transition = 'none'
+      track.style.transform = 'translateY(0)'
+
+      // Update React state to shift the window
+      cardBaseRef.current = (cardBaseRef.current + 1) % LISTINGS.length
+      setCardBase(cardBaseRef.current)
+
+      // Reset card styles
+      requestAnimationFrame(() => {
+        const newCards = track.children
+        for (let i = 0; i < newCards.length; i++) {
+          const c = newCards[i] as HTMLElement
+          c.style.transition = 'none'
+          c.style.opacity = i < 3 ? '1' : '0'
+          c.style.filter = 'blur(0px)'
+        }
+        slidingRef.current = false
+      })
+    }, 950)
+  }, [])
+
+  // Verb rotation + card slide + pixelation
   useEffect(() => {
     const interval = setInterval(() => {
       setVerbState('out')
-      setSlidePhase('sliding')
       runPixelSweep()
+      slideCards()
 
       setTimeout(() => {
         setVerbIndex((i) => (i + 1) % VERBS.length)
         setVerbState('in')
       }, 600)
-
-      // After the slide animation finishes, snap cardBase forward and reset
-      setTimeout(() => {
-        setCardBase((b) => (b + 1) % LISTINGS.length)
-        setSlidePhase('idle')
-      }, 900)
     }, 3000)
     return () => clearInterval(interval)
-  }, [runPixelSweep])
+  }, [runPixelSweep, slideCards])
 
   // Resize canvas
   useEffect(() => {
@@ -131,14 +193,8 @@ export default function HeroSection() {
     return () => window.removeEventListener('resize', resize)
   }, [loaded])
 
-  // Render 4 cards: indices [cardBase, +1, +2, +3]
-  // When idle: cards 0-2 visible, card 3 hidden below
-  // When sliding: all shift up, card 0 fades/blurs out, card 3 fades/unblurs in
+  // 4 card indices: 3 visible + 1 hidden entering from bottom
   const cardIndices = [0, 1, 2, 3].map((i) => (cardBase + i) % LISTINGS.length)
-  const CARD_HEIGHT = 118 // approximate card height + gap
-
-  // Aggressive radial fade mask for the image
-  const fadeMask = 'radial-gradient(ellipse 72% 75% at 42% 48%, black 30%, transparent 72%)'
 
   return (
     <section
@@ -149,7 +205,7 @@ export default function HeroSection() {
         background: 'var(--color-bg)',
       }}
     >
-      {/* Hero image — soft bleed from ALL sides */}
+      {/* Hero image — edge-only bleed, center stays full */}
       <div
         ref={imageWrapRef}
         style={{
@@ -171,8 +227,10 @@ export default function HeroSection() {
             objectFit: 'cover',
             objectPosition: 'center',
             opacity: 0.9,
-            maskImage: fadeMask,
-            WebkitMaskImage: fadeMask,
+            maskImage: EDGE_MASK,
+            WebkitMaskImage: EDGE_MASK,
+            maskComposite: 'intersect',
+            WebkitMaskComposite: 'source-in' as string,
           }}
         />
         <canvas
@@ -183,8 +241,10 @@ export default function HeroSection() {
             width: '100%',
             height: '100%',
             pointerEvents: 'none',
-            maskImage: fadeMask,
-            WebkitMaskImage: fadeMask,
+            maskImage: EDGE_MASK,
+            WebkitMaskImage: EDGE_MASK,
+            maskComposite: 'intersect',
+            WebkitMaskComposite: 'source-in' as string,
           }}
         />
       </div>
@@ -213,43 +273,21 @@ export default function HeroSection() {
             zIndex: 2,
           }}
         >
-          {/* Clip container — only shows 3 cards worth of height */}
-          <div style={{
-            height: CARD_HEIGHT * 3,
-            overflow: 'hidden',
-            position: 'relative',
-          }}>
-            {/* Inner sliding track — holds 4 cards, shifts up by 1 card height when sliding */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              transform: slidePhase === 'sliding'
-                ? `translateY(-${CARD_HEIGHT}px)`
-                : 'translateY(0)',
-              transition: slidePhase === 'sliding'
-                ? 'transform 800ms cubic-bezier(0.25, 1, 0.5, 1)'
-                : 'none',
-            }}>
+          <div style={{ overflow: 'hidden', position: 'relative' }}>
+            <div
+              ref={cardTrackRef}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 6,
+              }}
+            >
               {cardIndices.map((listingIdx, i) => {
                 const card = LISTINGS[listingIdx]
                 const num = String(listingIdx + 1).padStart(2, '0')
-                const isExiting = i === 0
-                const isEntering = i === 3
-
-                let cardOpacity = 1
-                let cardBlur = '0px'
-                if (slidePhase === 'sliding') {
-                  if (isExiting) { cardOpacity = 0; cardBlur = '8px' }
-                  if (isEntering) { cardOpacity = 1; cardBlur = '0px' }
-                }
-                if (slidePhase === 'idle' && isEntering) {
-                  cardOpacity = 0
-                }
-
                 return (
                   <div
-                    key={`${listingIdx}-${cardBase}`}
+                    key={`slot-${i}`}
                     style={{
                       background: 'rgba(245, 237, 228, 0.65)',
                       backdropFilter: 'blur(16px)',
@@ -257,12 +295,7 @@ export default function HeroSection() {
                       border: '1px solid var(--color-mauve)',
                       borderRadius: 4,
                       padding: '14px 16px',
-                      minHeight: CARD_HEIGHT - 6,
-                      opacity: cardOpacity,
-                      filter: `blur(${cardBlur})`,
-                      transition: slidePhase === 'sliding'
-                        ? 'opacity 700ms ease, filter 700ms ease'
-                        : 'none',
+                      opacity: i < 3 ? 1 : 0,
                     }}
                   >
                     <div style={{
@@ -319,7 +352,8 @@ export default function HeroSection() {
             >
               Silk Bazaar
             </div>
-            <div style={{ position: 'relative', height: 95, overflow: 'hidden' }} className="hero-verb-wrap">
+            {/* Taller container so descenders and tall letters aren't clipped */}
+            <div style={{ position: 'relative', height: 110, overflow: 'hidden' }} className="hero-verb-wrap">
               <span
                 key={verbIndex}
                 style={{
@@ -346,7 +380,7 @@ export default function HeroSection() {
           .hero-text-col { width: 100% !important; justify-content: center !important; }
           .hero-title { font-size: 48px !important; }
           .hero-verb { font-size: 48px !important; }
-          .hero-verb-wrap { height: 55px !important; }
+          .hero-verb-wrap { height: 60px !important; }
         }
       `}</style>
     </section>
