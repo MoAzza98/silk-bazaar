@@ -43,7 +43,9 @@ export default function ManifestoSection() {
     <section
       ref={sectionRef}
       style={{
-        background: 'var(--color-bg)',
+        position: 'relative',
+        zIndex: 2,
+        background: 'transparent',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -40,6 +40,8 @@ export default function RegisterSection() {
     <section
       id="register"
       style={{
+        position: 'relative',
+        zIndex: 2,
         minHeight: '100vh',
         background: 'var(--color-bg)',
         display: 'flex',
