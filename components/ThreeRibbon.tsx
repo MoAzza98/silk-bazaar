@@ -28,18 +28,17 @@ export default function ThreeRibbon({ progressRef }: Props) {
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(40, width / height, 0.01, 100)
-    // Pull camera back and slightly above to see the ribbon face-on
-    camera.position.set(0, 0.3, 4.5)
+    // Camera very close — ribbon fills the screen
+    const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 100)
+    camera.position.set(0, 0, 2.2)
     camera.lookAt(0, 0, 0)
 
-    // ===== LOOSE S-CURVE RIBBON (like Perplexity reference) =====
-    // Fewer turns, much larger radius and ribbon width
-    const segments = 600
-    const turns = 1.5       // fewer turns = looser
-    const radius = 0.8      // wider orbit
-    const helixHeight = 2.4 // taller
-    const ribbonWidth = 0.18 // much wider ribbon face
+    // ===== LARGE FLOWING RIBBON — fills the viewport =====
+    const segments = 800
+    const turns = 1.8         // gentle S-curves
+    const radius = 1.6        // wide orbit — spans the screen
+    const helixHeight = 4.0   // tall — extends well above and below viewport
+    const ribbonWidth = 0.55  // very wide face — text clearly readable
 
     const positions: number[] = []
     const uvs: number[] = []
@@ -67,15 +66,11 @@ export default function ThreeRibbon({ progressRef }: Props) {
       tangents.push(tang)
     }
 
-    // Use normal that keeps the ribbon face tilted toward the camera (Z axis)
-    // This makes the text readable from the front
+    // Binormals — ribbon face tilted toward camera
     for (let i = 0; i <= segments; i++) {
-      // Normal pointing outward from helix center (in XZ plane)
       const t = i / segments
       const angle = t * Math.PI * 2 * turns
       const outward = new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)).normalize()
-
-      // Binormal = cross(tangent, outward) — this gives us the ribbon width direction
       const b = new THREE.Vector3().crossVectors(tangents[i], outward).normalize()
       if (b.length() < 0.001) b.set(0, 0, 1)
       binormals.push(b)
@@ -88,11 +83,10 @@ export default function ThreeRibbon({ progressRef }: Props) {
     }
     const totalArcLength = arcLengths[segments]
 
-    // Build ribbon mesh — flat ribbon extruded along binormal
+    // Build ribbon mesh
     for (let i = 0; i <= segments; i++) {
       const p = helixPoints[i]
       const b = binormals[i]
-
       positions.push(p.x - b.x * ribbonWidth, p.y - b.y * ribbonWidth, p.z - b.z * ribbonWidth)
       uvs.push(arcLengths[i], 0)
       positions.push(p.x + b.x * ribbonWidth, p.y + b.y * ribbonWidth, p.z + b.z * ribbonWidth)
@@ -111,17 +105,17 @@ export default function ThreeRibbon({ progressRef }: Props) {
     geometry.setIndex(indices)
     geometry.computeVertexNormals()
 
-    // Text texture
+    // Text texture — larger for readability at close range
     const textCanvas = document.createElement('canvas')
     textCanvas.width = 4096
-    textCanvas.height = 128
+    textCanvas.height = 256
     const tctx = textCanvas.getContext('2d')!
-    tctx.clearRect(0, 0, 4096, 128)
+    tctx.clearRect(0, 0, 4096, 256)
     tctx.fillStyle = '#1a1208'
-    tctx.font = '500 36px Geist Mono, Courier New, monospace'
+    tctx.font = '500 64px Geist Mono, Courier New, monospace'
     let textStr = ''
-    while (tctx.measureText(textStr).width < 4096) textStr += RIBBON_TEXT
-    tctx.fillText(textStr, 0, 80)
+    while (tctx.measureText(textStr).width < 8192) textStr += RIBBON_TEXT
+    tctx.fillText(textStr, 0, 160)
 
     const texture = new THREE.CanvasTexture(textCanvas)
     texture.wrapS = THREE.RepeatWrapping
@@ -134,13 +128,13 @@ export default function ThreeRibbon({ progressRef }: Props) {
       }
     `
 
-    // Glass strand — semi-transparent white ribbon
+    // Glass strand
     const glassUniforms = {
-      u_opacity: { value: 0.88 },
+      u_opacity: { value: 0.92 },
       u_head: { value: 0.0 },
       u_tail: { value: 0.0 },
       u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.06 },
+      u_fade_w: { value: 0.04 },
     }
 
     const glassMaterial = new THREE.ShaderMaterial({
@@ -156,7 +150,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
         void main() {
           float p = v_uv.x / u_max_u;
           if (u_head <= u_tail || p < u_tail || p > u_head) discard;
-          float edge = smoothstep(0.0, 0.06, v_uv.y) * smoothstep(1.0, 0.94, v_uv.y);
+          float edge = smoothstep(0.0, 0.04, v_uv.y) * smoothstep(1.0, 0.96, v_uv.y);
           float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
                         * smoothstep(u_head, u_head - u_fade_w, p);
           gl_FragColor = vec4(0.98, 0.97, 0.95, u_opacity * edge * tipFade);
@@ -169,7 +163,6 @@ export default function ThreeRibbon({ progressRef }: Props) {
     })
 
     const glassMesh = new THREE.Mesh(geometry, glassMaterial)
-    scene.add(glassMesh)
 
     // Text strand
     const textUniforms = {
@@ -178,7 +171,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
       u_head: { value: 0.0 },
       u_tail: { value: 0.0 },
       u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.06 },
+      u_fade_w: { value: 0.04 },
     }
 
     const textMaterial = new THREE.ShaderMaterial({
@@ -209,20 +202,15 @@ export default function ThreeRibbon({ progressRef }: Props) {
     })
 
     const textMesh = new THREE.Mesh(geometry, textMaterial)
-    scene.add(textMesh)
 
-    // Tilt the whole ribbon group slightly toward camera for readability
     const group = new THREE.Group()
     group.add(glassMesh)
     group.add(textMesh)
-    group.rotation.x = -0.15 // slight tilt toward viewer
+    group.rotation.x = -0.1
     scene.add(group)
-    // Remove from scene root since they're in the group now
-    scene.remove(glassMesh)
-    scene.remove(textMesh)
 
     const isMobile = width < 768
-    const rotationMultiplier = isMobile ? Math.PI * 0.6 : Math.PI * 1.0
+    const rotationMultiplier = isMobile ? Math.PI * 0.5 : Math.PI * 0.8
 
     let animId: number
     function tick() {
@@ -230,18 +218,15 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
       const d = progressRef.current
 
-      // Head: draws in from 0 to 1 during d = 0.55 → 0.75
       const headVal = clamp((d - 0.55) / 0.20, 0, 1)
-      // Tail: stays at 0, then erases from 0 to 1 during d = 0.82 → 0.95
       const tailVal = clamp((d - 0.82) / 0.13, 0, 1)
 
       glassUniforms.u_head.value = headVal
       glassUniforms.u_tail.value = tailVal
       textUniforms.u_head.value = headVal
       textUniforms.u_tail.value = tailVal
-      textUniforms.u_offset.value = -d * 2.5
+      textUniforms.u_offset.value = -d * 2.0
 
-      // Gentle rotation
       const rotationD = clamp((d - 0.50) / 0.45, 0, 1)
       group.rotation.y = rotationD * rotationMultiplier
 
