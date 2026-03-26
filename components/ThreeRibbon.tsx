@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, type MutableRefObject } from 'react'
 import * as THREE from 'three'
-import { clamp, remap } from '@/lib/scrollUtils'
+import { clamp } from '@/lib/scrollUtils'
 
 const RIBBON_TEXT =
   'Where operators find their next project  \u2726  Underlevered assets  \u2726  Builder to operator  \u2726  AI deal intelligence  \u2726  On-chain escrow  \u2726  Asset manifest  \u2726  Silk Bazaar Verified  \u2726  '
@@ -19,6 +19,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
     const width = container.clientWidth
     const height = container.clientHeight
+    if (width === 0 || height === 0) return
 
     // Renderer
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
@@ -37,16 +38,14 @@ export default function ThreeRibbon({ progressRef }: Props) {
     const turns = 2.5
     const radius = 0.4
     const helixHeight = 1.8
-    const ribbonWidth = 0.04
+    const ribbonWidth = 0.06 // wider for better visibility
 
     const positions: number[] = []
     const uvs: number[] = []
     const indices: number[] = []
 
-    // Compute helix points and Frenet frames
     const helixPoints: THREE.Vector3[] = []
     const tangents: THREE.Vector3[] = []
-    const normals: THREE.Vector3[] = []
     const binormals: THREE.Vector3[] = []
 
     for (let i = 0; i <= segments; i++) {
@@ -71,15 +70,12 @@ export default function ThreeRibbon({ progressRef }: Props) {
       tangents.push(tang)
     }
 
-    // Compute normals and binormals using initial normal
+    // Compute binormals
     const initialNormal = new THREE.Vector3(0, 1, 0)
     for (let i = 0; i <= segments; i++) {
       const b = new THREE.Vector3().crossVectors(tangents[i], initialNormal).normalize()
-      if (b.length() < 0.001) {
-        b.set(1, 0, 0)
-      }
+      if (b.length() < 0.001) b.set(1, 0, 0)
       binormals.push(b)
-      normals.push(new THREE.Vector3().crossVectors(b, tangents[i]).normalize())
     }
 
     // Compute arc lengths
@@ -95,11 +91,8 @@ export default function ThreeRibbon({ progressRef }: Props) {
       const b = binormals[i]
       const u = arcLengths[i]
 
-      // Left edge
       positions.push(p.x - b.x * ribbonWidth, p.y - b.y * ribbonWidth, p.z - b.z * ribbonWidth)
       uvs.push(u, 0)
-
-      // Right edge
       positions.push(p.x + b.x * ribbonWidth, p.y + b.y * ribbonWidth, p.z + b.z * ribbonWidth)
       uvs.push(u, 1)
     }
@@ -108,9 +101,9 @@ export default function ThreeRibbon({ progressRef }: Props) {
       const a = i * 2
       const b = a + 1
       const c = a + 2
-      const d = a + 3
+      const dd = a + 3
       indices.push(a, b, c)
-      indices.push(b, d, c)
+      indices.push(b, dd, c)
     }
 
     const geometry = new THREE.BufferGeometry()
@@ -127,7 +120,6 @@ export default function ThreeRibbon({ progressRef }: Props) {
     tctx.clearRect(0, 0, 4096, 128)
     tctx.fillStyle = '#1a1208'
     tctx.font = '500 40px Geist Mono, Courier New, monospace'
-    // Repeat text to fill width
     let textStr = ''
     while (tctx.measureText(textStr).width < 4096) {
       textStr += RIBBON_TEXT
@@ -148,11 +140,11 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
     // Glass strand
     const glassUniforms = {
-      u_opacity: { value: 0.82 },
+      u_opacity: { value: 0.85 },
       u_head: { value: 0.0 },
       u_tail: { value: 0.0 },
       u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.12 },
+      u_fade_w: { value: 0.08 },
     }
 
     const glassMaterial = new THREE.ShaderMaterial({
@@ -167,7 +159,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
         varying vec2 v_uv;
         void main() {
           float p = v_uv.x / u_max_u;
-          if (p < u_tail || p > u_head) discard;
+          if (u_head <= u_tail || p < u_tail || p > u_head) discard;
           float edge = smoothstep(0.0, 0.08, v_uv.y) * smoothstep(1.0, 0.92, v_uv.y);
           float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
                         * smoothstep(u_head, u_head - u_fade_w, p);
@@ -190,7 +182,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
       u_head: { value: 0.0 },
       u_tail: { value: 0.0 },
       u_max_u: { value: totalArcLength },
-      u_fade_w: { value: 0.12 },
+      u_fade_w: { value: 0.08 },
     }
 
     const textMaterial = new THREE.ShaderMaterial({
@@ -206,7 +198,7 @@ export default function ThreeRibbon({ progressRef }: Props) {
         varying vec2 v_uv;
         void main() {
           float p = v_uv.x / u_max_u;
-          if (p < u_tail || p > u_head) discard;
+          if (u_head <= u_tail || p < u_tail || p > u_head) discard;
           float x = gl_FrontFacing ? v_uv.x + u_offset : v_uv.x - u_offset;
           vec4 texColor = texture2D(u_map, vec2(mod(x, u_max_u) / u_max_u, v_uv.y));
           float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
@@ -223,25 +215,24 @@ export default function ThreeRibbon({ progressRef }: Props) {
     const textMesh = new THREE.Mesh(geometry, textMaterial)
     scene.add(textMesh)
 
-    // Scroll mapping constants
-    const helixStart = -0.24
-    const helixExitStart = 0.66
-    const helixEnd = 1.0
-    const drawInEnd = 0.32
-    const eraseStart = 0.64
+    // ===== FIXED SCROLL MAPPING =====
+    // The ribbon draws during d = 0.55 → 0.75, stays visible, then erases d = 0.82 → 0.95
+    // head: 0→1 as d goes 0.55→0.75
+    // tail: stays 0 until d=0.82, then 0→1 as d goes 0.82→0.95
 
     const isMobile = width < 768
     const rotationMultiplier = isMobile ? Math.PI * 0.8 : Math.PI * 1.5
 
-    // Animation loop
     let animId: number
     function tick() {
       animId = requestAnimationFrame(tick)
 
       const d = progressRef.current
 
-      const headVal = remap(d, helixStart, helixExitStart, 0, drawInEnd)
-      const tailVal = remap(d, helixExitStart, helixEnd, eraseStart, 1)
+      // Head: draws in from 0 to 1
+      const headVal = clamp((d - 0.55) / 0.20, 0, 1)
+      // Tail: stays at 0, then erases from 0 to 1
+      const tailVal = clamp((d - 0.82) / 0.13, 0, 1)
 
       glassUniforms.u_head.value = headVal
       glassUniforms.u_tail.value = tailVal
@@ -249,8 +240,10 @@ export default function ThreeRibbon({ progressRef }: Props) {
       textUniforms.u_tail.value = tailVal
       textUniforms.u_offset.value = -d * 3
 
-      glassMesh.rotation.y = d * rotationMultiplier
-      textMesh.rotation.y = d * rotationMultiplier
+      // Rotate as user scrolls
+      const rotationD = clamp((d - 0.50) / 0.45, 0, 1)
+      glassMesh.rotation.y = rotationD * rotationMultiplier
+      textMesh.rotation.y = rotationD * rotationMultiplier
 
       renderer.render(scene, camera)
     }
@@ -275,7 +268,9 @@ export default function ThreeRibbon({ progressRef }: Props) {
       glassMaterial.dispose()
       textMaterial.dispose()
       texture.dispose()
-      container.removeChild(renderer.domElement)
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement)
+      }
     }
   }, [progressRef])
 
