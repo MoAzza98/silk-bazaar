@@ -28,17 +28,16 @@ export default function ThreeRibbon({ progressRef }: Props) {
     container.appendChild(renderer.domElement)
 
     const scene = new THREE.Scene()
-    // Camera very close — ribbon fills the screen
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 100)
-    camera.position.set(0, 0, 2.2)
+    camera.position.set(0, 0, 3.2)
     camera.lookAt(0, 0, 0)
 
-    // ===== LARGE FLOWING RIBBON — fills the viewport =====
+    // ===== FLOWING RIBBON — wide coverage, multiple visible swirls =====
     const segments = 800
-    const turns = 1.8         // gentle S-curves
-    const radius = 1.6        // wide orbit — spans the screen
-    const helixHeight = 4.0   // tall — extends well above and below viewport
-    const ribbonWidth = 0.55  // very wide face — text clearly readable
+    const turns = 3.0         // more turns = more swirls visible on screen
+    const radius = 1.2        // wide enough to span screen but not overwhelming
+    const helixHeight = 5.0   // tall — many loops visible at once
+    const ribbonWidth = 0.35  // wide face, readable text
 
     const positions: number[] = []
     const uvs: number[] = []
@@ -218,16 +217,18 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
       const d = progressRef.current
 
-      const headVal = clamp((d - 0.55) / 0.20, 0, 1)
-      const tailVal = clamp((d - 0.82) / 0.13, 0, 1)
+      // Gradually unfurl: draw-in over d 0.50→0.78, erase over d 0.80→0.96
+      const headVal = clamp((d - 0.50) / 0.28, 0, 1)
+      const tailVal = clamp((d - 0.80) / 0.16, 0, 1)
 
       glassUniforms.u_head.value = headVal
       glassUniforms.u_tail.value = tailVal
       textUniforms.u_head.value = headVal
       textUniforms.u_tail.value = tailVal
-      textUniforms.u_offset.value = -d * 2.0
+      textUniforms.u_offset.value = -d * 1.5
 
-      const rotationD = clamp((d - 0.50) / 0.45, 0, 1)
+      // Gentle rotation over the full ribbon lifetime
+      const rotationD = clamp((d - 0.48) / 0.48, 0, 1)
       group.rotation.y = rotationD * rotationMultiplier
 
       renderer.render(scene, camera)
