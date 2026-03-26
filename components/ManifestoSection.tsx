@@ -23,12 +23,12 @@ export default function ManifestoSection() {
     <section
       ref={ref}
       style={{
-        minHeight: 500,
+        minHeight: 700,
         background: 'var(--color-bg)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '80px 32px 40px',
+        padding: '100px 32px 80px',
         willChange: 'opacity, filter',
       }}
     >

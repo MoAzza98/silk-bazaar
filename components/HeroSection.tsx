@@ -15,11 +15,11 @@ const LISTINGS = [
   { body: 'DAO with 2.1M treasury, governance fatigue, needs operator' },
 ]
 
-// Edge-only bleed: fade on all 4 edges, but keep the center fully visible
-// Composited linear gradients for each edge
+// Very gradual bleed — fade starts deep inside the image (25-30% in)
+// and transitions slowly to transparent. Big blur radius, organic feel.
 const EDGE_MASK = [
-  'linear-gradient(to right, transparent, black 12%, black 88%, transparent)',
-  'linear-gradient(to bottom, transparent, black 8%, black 85%, transparent)',
+  'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 8%, rgba(0,0,0,0.7) 18%, black 30%, black 70%, rgba(0,0,0,0.7) 82%, rgba(0,0,0,0.3) 92%, transparent 100%)',
+  'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 6%, rgba(0,0,0,0.8) 15%, black 28%, black 72%, rgba(0,0,0,0.8) 85%, rgba(0,0,0,0.4) 94%, transparent 100%)',
 ].join(', ')
 
 export default function HeroSection() {
@@ -205,15 +205,15 @@ export default function HeroSection() {
         background: 'var(--color-bg)',
       }}
     >
-      {/* Hero image — edge-only bleed, center stays full */}
+      {/* Hero image — ~85% of viewport, slightly left of center, deep gradual bleed */}
       <div
         ref={imageWrapRef}
         style={{
           position: 'absolute',
-          top: 20,
-          left: '4%',
-          width: '58%',
-          height: 'calc(100% - 40px)',
+          top: -20,
+          left: '-3%',
+          width: '88%',
+          height: 'calc(100% + 40px)',
           pointerEvents: 'none',
         }}
       >
