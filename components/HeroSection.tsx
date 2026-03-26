@@ -1,9 +1,7 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import dynamic from 'next/dynamic'
+import GlimmerEffect from './GlimmerEffect'
 import type { GlimmerHandle } from './GlimmerEffect'
-
-const GlimmerEffect = dynamic(() => import('./GlimmerEffect'), { ssr: false })
 
 const VERBS = ['discovers', 'surfaces', 'auctions', 'acquires', 'scales', 'connects', 'activates']
 
