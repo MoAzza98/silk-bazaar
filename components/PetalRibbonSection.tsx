@@ -100,16 +100,30 @@ export default function PetalRibbonSection() {
   const smallPetals = useMemo(() => generateSmallPetals(), [])
   const bigPetals = useMemo(() => generateBigPetals(), [])
 
-  // Preload petal images
+  // Preload petal images AND ribbon-bg so there's no hiccup when revealing
   useEffect(() => {
     let loaded = 0
+    const totalToLoad = 8 // 7 petals + 1 ribbon bg
     const images: HTMLImageElement[] = []
+
+    // Preload ribbon background first
+    const ribbonImg = new Image()
+    ribbonImg.src = '/ribbon-bg.jpg'
+    ribbonImg.onload = () => {
+      loaded++
+      if (loaded === totalToLoad) {
+        petalImagesRef.current = images
+        setImagesLoaded(true)
+      }
+    }
+
+    // Preload petal images
     for (let i = 0; i < 7; i++) {
       const img = new Image()
       img.src = `/petals/petal-${i + 1}.png`
       img.onload = () => {
         loaded++
-        if (loaded === 7) {
+        if (loaded === totalToLoad) {
           petalImagesRef.current = images
           setImagesLoaded(true)
         }

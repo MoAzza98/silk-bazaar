@@ -19,7 +19,7 @@ const LISTINGS = [
 // and transitions slowly to transparent. Big blur radius, organic feel.
 const EDGE_MASK = [
   'linear-gradient(to right, transparent 0%, rgba(0,0,0,0.3) 8%, rgba(0,0,0,0.7) 18%, black 30%, black 70%, rgba(0,0,0,0.7) 82%, rgba(0,0,0,0.3) 92%, transparent 100%)',
-  'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 6%, rgba(0,0,0,0.8) 15%, black 28%, black 72%, rgba(0,0,0,0.8) 85%, rgba(0,0,0,0.4) 94%, transparent 100%)',
+  'linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.4) 6%, rgba(0,0,0,0.8) 15%, black 28%, black 60%, rgba(0,0,0,0.6) 72%, rgba(0,0,0,0.2) 82%, transparent 90%)',
 ].join(', ')
 
 export default function HeroSection() {

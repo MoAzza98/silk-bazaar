@@ -10,6 +10,8 @@ export default function Home() {
   return (
     <SessionWrapper>
       <main>
+        {/* Preload ribbon-bg so it's cached before the petal section needs it */}
+        <link rel="preload" as="image" href="/ribbon-bg.jpg" />
         <Nav />
         <HeroSection />
         <ManifestoSection />
