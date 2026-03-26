@@ -112,7 +112,7 @@ export default function HeroSection() {
       setTimeout(() => {
         setVerbState('idle')
       }, 1200)
-    }, 3000)
+    }, 3500)
     return () => clearInterval(interval)
   }, [slideCards])
 
