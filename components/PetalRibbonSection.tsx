@@ -143,9 +143,10 @@ export default function PetalRibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // === RIBBON BG: instant swap when big petals are covering screen (d >= 0.32) ===
+      // === RIBBON BG: gradual fizzle-in behind the petals ===
       if (ribbonBgRef.current) {
-        ribbonBgRef.current.style.opacity = d >= 0.32 ? '1' : '0'
+        const bgOpacity = clamp((d - 0.24) / 0.16, 0, 1)
+        ribbonBgRef.current.style.opacity = String(bgOpacity)
       }
 
       // === SMALL PETALS on canvas ===
@@ -164,13 +165,23 @@ export default function PetalRibbonSection() {
           const progress = (d - p.enterStart) / lifespan
           const fadeIn = clamp(progress / 0.2, 0, 1)
           const fadeOut = clamp((1 - progress) / 0.2, 0, 1)
-          const alpha = fadeIn * fadeOut
-          if (alpha < 0.01) continue
+          let alpha = fadeIn * fadeOut
 
           const x = cw * (1.1 - progress * 1.5 * p.speed)
           const y = p.startY * ch + Math.sin(progress * p.swayFreq * Math.PI * 4) * p.swayAmp
           const rot = progress * p.rotation * (Math.PI / 180)
           const size = p.size * (cw / 1440)
+
+          // Edge fade: fade out near all 4 screen edges
+          const edgeMargin = cw * 0.1 // 10% of width
+          const edgeMarginY = ch * 0.08
+          const edgeFadeL = clamp(x / edgeMargin, 0, 1)
+          const edgeFadeR = clamp((cw - x) / edgeMargin, 0, 1)
+          const edgeFadeT = clamp(y / edgeMarginY, 0, 1)
+          const edgeFadeB = clamp((ch - y) / edgeMarginY, 0, 1)
+          alpha *= edgeFadeL * edgeFadeR * edgeFadeT * edgeFadeB
+
+          if (alpha < 0.01) continue
 
           const img = petalImagesRef.current[p.imgIdx]
           if (!img) continue
@@ -199,7 +210,13 @@ export default function PetalRibbonSection() {
         // Opacity: quick fade in at start, fade out at end
         const fadeIn = clamp(lifeP / 0.15, 0, 1)
         const fadeOut = clamp((1 - lifeP) / 0.15, 0, 1)
-        const alpha = fadeIn * fadeOut
+        let alpha = fadeIn * fadeOut
+
+        // Edge fade: fade when approaching left or right screen edges
+        // xPos is in vw units. Fade within 15vw of either edge
+        const edgeFadeR = clamp((100 - xPos) / 15, 0, 1) // entering from right
+        const edgeFadeL = clamp((xPos + 20) / 15, 0, 1)  // exiting left (account for petal width)
+        alpha *= edgeFadeR * edgeFadeL
 
         // Blur: starts at blurStartRatio through the lifespan
         const blurP = clamp((lifeP - cfg.blurStartRatio) / (1 - cfg.blurStartRatio), 0, 1)
