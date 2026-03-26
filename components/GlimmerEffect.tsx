@@ -81,7 +81,8 @@ const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
 
     useImperativeHandle(ref, () => ({
       morph: () => {
-        if (!uniformsRef.current || morphingRef.current) return
+        if (!uniformsRef.current) return
+        // Allow re-triggering — restart the animation even if one is running
         morphingRef.current = true
         uniformsRef.current.u_active.value = 1.0
         uniformsRef.current.u_progress.value = 0.0

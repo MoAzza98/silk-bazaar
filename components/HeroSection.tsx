@@ -93,27 +93,28 @@ export default function HeroSection() {
   }, [])
 
   // Verb rotation + glimmer morph + card slide
+  // Use ref for verbIndex to avoid re-creating interval on every verb change
+  const verbIndexRef = useRef(0)
   useEffect(() => {
     const interval = setInterval(() => {
-      // Start exit: current word slides up + blurs out
-      setPrevVerbIndex(verbIndex)
+      setPrevVerbIndex(verbIndexRef.current)
       setVerbState('exiting')
       glimmerRef.current?.morph()
       slideCards()
 
-      // After exit animation, swap word and enter
       setTimeout(() => {
-        setVerbIndex((i) => (i + 1) % VERBS.length)
+        const next = (verbIndexRef.current + 1) % VERBS.length
+        verbIndexRef.current = next
+        setVerbIndex(next)
         setVerbState('entering')
       }, 600)
 
-      // Settle to idle
       setTimeout(() => {
         setVerbState('idle')
       }, 1200)
     }, 3000)
     return () => clearInterval(interval)
-  }, [slideCards, verbIndex])
+  }, [slideCards])
 
   const cardIndices = [0, 1, 2, 3].map((i) => (cardBase + i) % LISTINGS.length)
 
