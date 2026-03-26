@@ -46,41 +46,45 @@ function generateSmallPetals(): SmallPetal[] {
 interface BigPetal {
   src: string
   size: number
-  gridX: number
   gridY: number
   enterStart: number
-  enterEnd: number
-  blurStart: number
   exitEnd: number
-  startOffX: number // starting X offset in vw (off-screen right)
+  driftSpeed: number // how fast it moves across (vw per d unit)
+  startX: number     // starting X in vw (off-screen right)
+  blurStartRatio: number // fraction of lifespan where blur starts (e.g. 0.7)
 }
 
 function generateBigPetals(): BigPetal[] {
-  const petals: BigPetal[] = []
-  // 10 big petals, 2x5 grid
-  // Enter at d ~0.20, fully covering by d ~0.28
-  // Sharp on screen until d ~0.38, then blur and exit by d ~0.50
-  const positions = [
-    { x: -0.1, y: -0.15 }, { x: 0.45, y: -0.10 },
-    { x: -0.05, y: 0.10 }, { x: 0.50, y: 0.15 },
-    { x: -0.1, y: 0.35 }, { x: 0.45, y: 0.38 },
-    { x: -0.05, y: 0.55 }, { x: 0.50, y: 0.58 },
-    { x: -0.1, y: 0.75 }, { x: 0.45, y: 0.78 },
+  // 10 big petals — each drifts continuously from right to left
+  // Heavily staggered entry times and varied speeds for natural feel
+  // They all pass through the center covering the screen, then continue left
+  const defs: Omit<BigPetal, 'src'>[] = [
+    // Row 1 top — fast mover, arrives early
+    { size: 1000, gridY: -15, enterStart: 0.14, exitEnd: 0.42, driftSpeed: 220, startX: 110, blurStartRatio: 0.65 },
+    // Row 1 top-right — slower, arrives later
+    { size: 900,  gridY: -8,  enterStart: 0.19, exitEnd: 0.50, driftSpeed: 180, startX: 120, blurStartRatio: 0.70 },
+    // Row 2 — medium speed, early
+    { size: 1100, gridY: 10,  enterStart: 0.16, exitEnd: 0.46, driftSpeed: 200, startX: 105, blurStartRatio: 0.68 },
+    // Row 2 right — fast, late
+    { size: 950,  gridY: 18,  enterStart: 0.22, exitEnd: 0.48, driftSpeed: 240, startX: 130, blurStartRatio: 0.62 },
+    // Row 3 center — slowest, arrives mid
+    { size: 1200, gridY: 32,  enterStart: 0.18, exitEnd: 0.52, driftSpeed: 160, startX: 100, blurStartRatio: 0.72 },
+    // Row 3 right — fast
+    { size: 1000, gridY: 40,  enterStart: 0.24, exitEnd: 0.50, driftSpeed: 250, startX: 125, blurStartRatio: 0.60 },
+    // Row 4 — medium
+    { size: 1100, gridY: 55,  enterStart: 0.17, exitEnd: 0.48, driftSpeed: 190, startX: 115, blurStartRatio: 0.67 },
+    // Row 4 right — slow, late
+    { size: 950,  gridY: 60,  enterStart: 0.25, exitEnd: 0.54, driftSpeed: 170, startX: 135, blurStartRatio: 0.72 },
+    // Row 5 bottom — early fast
+    { size: 1050, gridY: 75,  enterStart: 0.15, exitEnd: 0.44, driftSpeed: 210, startX: 108, blurStartRatio: 0.66 },
+    // Row 5 bottom-right — latest, slow
+    { size: 1150, gridY: 80,  enterStart: 0.26, exitEnd: 0.56, driftSpeed: 150, startX: 140, blurStartRatio: 0.75 },
   ]
-  positions.forEach((pos, i) => {
-    petals.push({
-      src: `/petals/petal-${(i % 7) + 1}.png`,
-      size: 800 + (i % 3) * 200,
-      gridX: pos.x,
-      gridY: pos.y,
-      startOffX: 60 + (i % 3) * 20, // start 60-80vw to the right
-      enterStart: 0.20 + i * 0.005,
-      enterEnd: 0.28 + i * 0.005,
-      blurStart: 0.38 + i * 0.005,
-      exitEnd: 0.50 + i * 0.005,
-    })
-  })
-  return petals
+
+  return defs.map((def, i) => ({
+    ...def,
+    src: `/petals/petal-${(i % 7) + 1}.png`,
+  }))
 }
 
 export default function PetalRibbonSection() {
@@ -139,9 +143,9 @@ export default function PetalRibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // === RIBBON BG: instant swap when big petals fully cover (d >= 0.30) ===
+      // === RIBBON BG: instant swap when big petals are covering screen (d >= 0.32) ===
       if (ribbonBgRef.current) {
-        ribbonBgRef.current.style.opacity = d >= 0.30 ? '1' : '0'
+        ribbonBgRef.current.style.opacity = d >= 0.32 ? '1' : '0'
       }
 
       // === SMALL PETALS on canvas ===
@@ -180,30 +184,30 @@ export default function PetalRibbonSection() {
         }
       }
 
-      // === BIG PETALS — slide in from right via transform ===
+      // === BIG PETALS — continuous drift from right to left, never parks ===
       for (let i = 0; i < bigPetalsRef.current.length; i++) {
         const el = bigPetalsRef.current[i]
         if (!el) continue
         const cfg = bigPetals[i]
 
-        // Enter phase: slide from off-screen right to grid position
-        const enterP = clamp((d - cfg.enterStart) / (cfg.enterEnd - cfg.enterStart), 0, 1)
-        // Eased slide-in
-        const easedEnter = 1 - Math.pow(1 - enterP, 3) // ease-out cubic
+        const lifespan = cfg.exitEnd - cfg.enterStart
+        const lifeP = clamp((d - cfg.enterStart) / lifespan, 0, 1)
 
-        // Blur phase
-        const blurP = clamp((d - cfg.blurStart) / (cfg.exitEnd - cfg.blurStart), 0, 1)
+        // Continuous X position: starts at startX vw, drifts left at driftSpeed
+        const xPos = cfg.startX - lifeP * cfg.driftSpeed
 
-        // Opacity: fade in during enter, fade out during blur
-        const alpha = clamp(enterP * 3, 0, 1) * (1 - blurP)
+        // Opacity: quick fade in at start, fade out at end
+        const fadeIn = clamp(lifeP / 0.15, 0, 1)
+        const fadeOut = clamp((1 - lifeP) / 0.15, 0, 1)
+        const alpha = fadeIn * fadeOut
+
+        // Blur: starts at blurStartRatio through the lifespan
+        const blurP = clamp((lifeP - cfg.blurStartRatio) / (1 - cfg.blurStartRatio), 0, 1)
         const blur = blurP * 30
-
-        // Transform: start at startOffX vw to the right, ease to 0
-        const xOffset = cfg.startOffX * (1 - easedEnter)
 
         el.style.opacity = String(clamp(alpha, 0, 1))
         el.style.filter = blur > 0.5 ? `blur(${blur.toFixed(0)}px)` : 'none'
-        el.style.transform = `translateX(${xOffset}vw)`
+        el.style.transform = `translateX(${xPos}vw)`
       }
 
       // === HEADING CHARS — enter d 0.55-0.75 ===
@@ -279,8 +283,8 @@ export default function PetalRibbonSection() {
               alt=""
               style={{
                 position: 'absolute',
-                left: `${cfg.gridX * 100}%`,
-                top: `${cfg.gridY * 100}%`,
+                left: 0,
+                top: `${cfg.gridY}%`,
                 width: cfg.size,
                 height: 'auto',
                 opacity: 0,
