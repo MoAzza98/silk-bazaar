@@ -29,15 +29,15 @@ export default function ThreeRibbon({ progressRef }: Props) {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(50, width / height, 0.01, 100)
-    camera.position.set(0, 0, 3.2)
+    camera.position.set(0, 0, 5.0)
     camera.lookAt(0, 0, 0)
 
-    // ===== FLOWING RIBBON — wide coverage, multiple visible swirls =====
+    // ===== ELEGANT FLOWING RIBBON — spaced-out swirls, readable text =====
     const segments = 800
-    const turns = 3.0         // more turns = more swirls visible on screen
-    const radius = 1.2        // wide enough to span screen but not overwhelming
-    const helixHeight = 5.0   // tall — many loops visible at once
-    const ribbonWidth = 0.35  // wide face, readable text
+    const turns = 2.5         // enough for 3-4 visible bands
+    const radius = 1.0        // spans most of screen width at this camera distance
+    const helixHeight = 8.0   // very tall — loops spaced far apart vertically
+    const ribbonWidth = 0.22  // wide enough to read, thin enough not to overlap
 
     const positions: number[] = []
     const uvs: number[] = []
