@@ -10,7 +10,8 @@ export default function ManifestoSection() {
       const el = ref.current
       if (!el) return
       const { top, height } = el.getBoundingClientRect()
-      const exitProgress = clamp((-top - height * 0.35) / (height * 0.5), 0, 1)
+      // Start blurring almost immediately when section starts scrolling up
+      const exitProgress = clamp((-top - height * 0.05) / (height * 0.35), 0, 1)
       el.style.opacity = String(1 - exitProgress)
       el.style.filter = exitProgress > 0 ? `blur(${(exitProgress * 12).toFixed(1)}px)` : ''
     }

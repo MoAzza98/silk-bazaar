@@ -7,11 +7,11 @@ const ThreeRibbon = dynamic(() => import('./ThreeRibbon'), { ssr: false })
 
 const HEADING = 'Silk Bazaar surfaces.'
 
-// ====== SMALL PETAL CONFIG (canvas-rendered for performance) ======
+// ====== SMALL PETAL CONFIG (canvas-rendered) ======
 interface SmallPetal {
-  imgIdx: number // 0-6 for petal images
+  imgIdx: number
   size: number
-  startY: number // 0-1 fraction of viewport
+  startY: number
   speed: number
   swayAmp: number
   swayFreq: number
@@ -22,49 +22,44 @@ interface SmallPetal {
 
 function generateSmallPetals(): SmallPetal[] {
   const petals: SmallPetal[] = []
-  // 200 small petals with exponential density:
-  // d 0.00-0.04: ~10 petals enter
-  // d 0.02-0.06: ~30 more
-  // d 0.04-0.08: ~60 more
-  // d 0.06-0.10: ~100 more
+  // 200 small petals, exponential density
+  // Spread across d 0.00 - 0.25 (was 0-0.10, now 2.5x slower)
   for (let i = 0; i < 200; i++) {
-    // Exponential distribution: more petals enter later
     const t = i / 200
-    const enterStart = t * t * 0.10 // quadratic: most enter near d=0.10
+    const enterStart = t * t * 0.25
     petals.push({
       imgIdx: i % 7,
-      size: 60 + (i % 5) * 30, // 60-180px
-      startY: (i * 137 % 200) / 200, // pseudo-random Y spread
+      size: 60 + (i % 5) * 30,
+      startY: (i * 137 % 200) / 200,
       speed: 0.7 + (i % 8) * 0.08,
       swayAmp: 8 + (i % 6) * 4,
       swayFreq: 0.5 + (i % 5) * 0.2,
       rotation: (i * 47) % 360,
       enterStart,
-      exitEnd: enterStart + 0.08 + (i % 3) * 0.02, // each petal lives for 0.08-0.12 d
+      exitEnd: enterStart + 0.12 + (i % 3) * 0.04, // longer lifespan
     })
   }
   return petals
 }
 
-// ====== BIG PETAL CONFIG (DOM elements for CSS blur) ======
+// ====== BIG PETAL CONFIG (DOM for CSS blur + transform) ======
 interface BigPetal {
   src: string
   size: number
-  gridX: number // 0-1 viewport fraction
-  gridY: number // 0-1 viewport fraction
-  speed: number
+  gridX: number
+  gridY: number
   enterStart: number
-  enterEnd: number // fully on screen, sharp
-  blurStart: number // start blurring
-  exitEnd: number // fully gone
+  enterEnd: number
+  blurStart: number
+  exitEnd: number
+  startOffX: number // starting X offset in vw (off-screen right)
 }
 
 function generateBigPetals(): BigPetal[] {
-  // 10 big petals in a grid covering the entire viewport
-  // Each is massive (120-160vh) to guarantee coverage despite transparent areas
-  // They enter at d ~0.08, fully cover by d ~0.12, blur and exit by d ~0.26
   const petals: BigPetal[] = []
-  // 2 columns x 5 rows, offset to overlap
+  // 10 big petals, 2x5 grid
+  // Enter at d ~0.20, fully covering by d ~0.28
+  // Sharp on screen until d ~0.38, then blur and exit by d ~0.50
   const positions = [
     { x: -0.1, y: -0.15 }, { x: 0.45, y: -0.10 },
     { x: -0.05, y: 0.10 }, { x: 0.50, y: 0.15 },
@@ -75,14 +70,14 @@ function generateBigPetals(): BigPetal[] {
   positions.forEach((pos, i) => {
     petals.push({
       src: `/petals/petal-${(i % 7) + 1}.png`,
-      size: 800 + (i % 3) * 200, // 800-1200px
+      size: 800 + (i % 3) * 200,
       gridX: pos.x,
       gridY: pos.y,
-      speed: 0.15 + (i % 3) * 0.05, // very slow drift
-      enterStart: 0.08 + i * 0.003,
-      enterEnd: 0.12 + i * 0.003, // fully on screen, SHARP
-      blurStart: 0.18 + i * 0.004, // start blurring here
-      exitEnd: 0.26 + i * 0.004, // gone
+      startOffX: 60 + (i % 3) * 20, // start 60-80vw to the right
+      enterStart: 0.20 + i * 0.005,
+      enterEnd: 0.28 + i * 0.005,
+      blurStart: 0.38 + i * 0.005,
+      exitEnd: 0.50 + i * 0.005,
     })
   })
   return petals
@@ -101,7 +96,7 @@ export default function PetalRibbonSection() {
   const smallPetals = useMemo(() => generateSmallPetals(), [])
   const bigPetals = useMemo(() => generateBigPetals(), [])
 
-  // Preload petal images for canvas rendering
+  // Preload petal images
   useEffect(() => {
     let loaded = 0
     const images: HTMLImageElement[] = []
@@ -122,7 +117,6 @@ export default function PetalRibbonSection() {
   useEffect(() => {
     if (!imagesLoaded) return
 
-    // Resize canvas
     function resizeCanvas() {
       const canvas = canvasRef.current
       const container = sectionRef.current?.querySelector('.petal-sticky') as HTMLElement
@@ -145,10 +139,9 @@ export default function PetalRibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // === RIBBON BG: instant swap while big petals cover (not a fade) ===
-      // At d=0.13, big petals are fully covering → swap bg to visible
+      // === RIBBON BG: instant swap when big petals fully cover (d >= 0.30) ===
       if (ribbonBgRef.current) {
-        ribbonBgRef.current.style.opacity = d >= 0.13 ? '1' : '0'
+        ribbonBgRef.current.style.opacity = d >= 0.30 ? '1' : '0'
       }
 
       // === SMALL PETALS on canvas ===
@@ -168,14 +161,12 @@ export default function PetalRibbonSection() {
           const fadeIn = clamp(progress / 0.2, 0, 1)
           const fadeOut = clamp((1 - progress) / 0.2, 0, 1)
           const alpha = fadeIn * fadeOut
-
           if (alpha < 0.01) continue
 
-          // Position: drift from right to left
           const x = cw * (1.1 - progress * 1.5 * p.speed)
           const y = p.startY * ch + Math.sin(progress * p.swayFreq * Math.PI * 4) * p.swayAmp
           const rot = progress * p.rotation * (Math.PI / 180)
-          const size = p.size * (cw / 1440) // scale to viewport
+          const size = p.size * (cw / 1440)
 
           const img = petalImagesRef.current[p.imgIdx]
           if (!img) continue
@@ -189,34 +180,37 @@ export default function PetalRibbonSection() {
         }
       }
 
-      // === BIG PETALS (DOM) ===
+      // === BIG PETALS — slide in from right via transform ===
       for (let i = 0; i < bigPetalsRef.current.length; i++) {
         const el = bigPetalsRef.current[i]
         if (!el) continue
         const cfg = bigPetals[i]
 
-        // Enter phase: sharp, no blur
+        // Enter phase: slide from off-screen right to grid position
         const enterP = clamp((d - cfg.enterStart) / (cfg.enterEnd - cfg.enterStart), 0, 1)
-        // Blur phase: starts blurring
+        // Eased slide-in
+        const easedEnter = 1 - Math.pow(1 - enterP, 3) // ease-out cubic
+
+        // Blur phase
         const blurP = clamp((d - cfg.blurStart) / (cfg.exitEnd - cfg.blurStart), 0, 1)
 
-        const alpha = enterP * (1 - blurP)
-        const blur = blurP * 30 // heavy blur as they exit
+        // Opacity: fade in during enter, fade out during blur
+        const alpha = clamp(enterP * 3, 0, 1) * (1 - blurP)
+        const blur = blurP * 30
 
-        // Minimal horizontal drift
-        const lifeProgress = clamp((d - cfg.enterStart) / (cfg.exitEnd - cfg.enterStart), 0, 1)
-        const driftX = -lifeProgress * 15 * cfg.speed // slight left drift in vw
+        // Transform: start at startOffX vw to the right, ease to 0
+        const xOffset = cfg.startOffX * (1 - easedEnter)
 
         el.style.opacity = String(clamp(alpha, 0, 1))
         el.style.filter = blur > 0.5 ? `blur(${blur.toFixed(0)}px)` : 'none'
-        el.style.transform = `translateX(${driftX}vw)`
+        el.style.transform = `translateX(${xOffset}vw)`
       }
 
-      // === HEADING CHARS ===
+      // === HEADING CHARS — enter d 0.55-0.75 ===
       for (let i = 0; i < charsRef.current.length; i++) {
         const span = charsRef.current[i]
         if (!span) continue
-        const charStart = 0.50 + i * 0.003
+        const charStart = 0.55 + i * 0.003
         const charEnd = charStart + 0.06
         const enterP = clamp((d - charStart) / (charEnd - charStart), 0, 1)
         const easedEnter = cubicBezier(0.12, 1, 0.72, 1, enterP)
@@ -247,7 +241,7 @@ export default function PetalRibbonSection() {
     <section
       ref={sectionRef}
       data-section="petal-ribbon"
-      style={{ height: '280vh', position: 'relative' }}
+      style={{ height: '600vh', position: 'relative' }}
     >
       <div
         className="petal-sticky"
@@ -259,7 +253,6 @@ export default function PetalRibbonSection() {
           background: 'var(--color-bg)',
         }}
       >
-        {/* Ribbon bg — instant swap, no fade */}
         <div
           ref={ribbonBgRef}
           style={{ position: 'absolute', inset: 0, zIndex: 0, opacity: 0, transition: 'none' }}
@@ -272,18 +265,11 @@ export default function PetalRibbonSection() {
           <div style={{ position: 'absolute', inset: 0, background: 'rgba(8, 5, 2, 0.55)' }} />
         </div>
 
-        {/* Small petals canvas */}
         <canvas
           ref={canvasRef}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 1,
-            pointerEvents: 'none',
-          }}
+          style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
         />
 
-        {/* Big close-up petals (DOM for CSS blur) */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none', overflow: 'hidden' }}>
           {bigPetals.map((cfg, i) => (
             <img
@@ -305,12 +291,10 @@ export default function PetalRibbonSection() {
           ))}
         </div>
 
-        {/* Three.js Ribbon */}
         <div style={{ position: 'absolute', inset: 0, zIndex: 6, pointerEvents: 'none' }}>
           <ThreeRibbon progressRef={progressRef} />
         </div>
 
-        {/* Heading */}
         <div
           style={{
             position: 'absolute', inset: 0, zIndex: 7,
