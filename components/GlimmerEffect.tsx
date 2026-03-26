@@ -31,8 +31,8 @@ const FRAGMENT_SHADER = `
       return;
     }
 
-    // Wave sweeps bottom to top
-    float wavePos = 1.0 - v_uv.y;
+    // Wave sweeps bottom to top (uv.y=0 at bottom, 1 at top)
+    float wavePos = v_uv.y;
 
     // Distance from wave front
     float distFromWave = abs(wavePos - u_progress);
@@ -86,7 +86,7 @@ const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
         uniformsRef.current.u_active.value = 1.0
         uniformsRef.current.u_progress.value = 0.0
 
-        const duration = 1400
+        const duration = 2200
         const start = performance.now()
 
         function animate(now: number) {
