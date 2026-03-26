@@ -262,7 +262,7 @@ export default function PetalRibbonSection() {
     <section
       ref={sectionRef}
       data-section="petal-ribbon"
-      style={{ height: '600vh', position: 'relative' }}
+      style={{ height: '600vh', position: 'relative', marginTop: '-30vh' }}
     >
       <div
         className="petal-sticky"
