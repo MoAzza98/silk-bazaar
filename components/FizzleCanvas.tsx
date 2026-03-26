@@ -2,7 +2,6 @@
 import { useEffect, useRef } from 'react'
 import { clamp } from '@/lib/scrollUtils'
 
-// Simplex 2D noise + fBm GLSL (inlined)
 const VERTEX_SRC = `
   attribute vec2 a_position;
   varying vec2 v_uv;
@@ -20,7 +19,6 @@ const FRAGMENT_SRC = `
   uniform vec2 u_resolution;
   uniform vec3 u_bg_color;
 
-  // --- Simplex 2D noise ---
   vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
   vec2 mod289v2(vec2 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
   vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -48,7 +46,6 @@ const FRAGMENT_SRC = `
     return 130.0 * dot(m, g);
   }
 
-  // --- fBm: 4 octaves ---
   float fbm(vec2 p) {
     float val = 0.0;
     float amp = 0.5;
@@ -65,23 +62,18 @@ const FRAGMENT_SRC = `
     vec2 uv = v_uv;
     float aspect = u_resolution.x / u_resolution.y;
 
-    // Noise sampling
     float noise = fbm(uv * vec2(aspect, 1.0) * 0.22 * 13.0 + u_time * 0.04);
-    noise = noise * 0.5 + 0.5; // remap to 0..1
+    noise = noise * 0.5 + 0.5;
 
-    // Tame noise near edges
     float edgeDist = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
     noise = mix(noise * 0.7, noise, smoothstep(0.0, 0.3, edgeDist));
 
-    // Dissolve: high noise values reveal first
     float dissolveEdge = 0.22;
     float alpha = smoothstep(u_progress - dissolveEdge, u_progress + dissolveEdge, noise);
 
-    // SolidIn: fully opaque at very start
     float solidIn = 1.0 - smoothstep(0.0, dissolveEdge, u_progress);
     alpha = max(alpha, solidIn);
 
-    // ClearOut: fully transparent at end
     float clearOut = smoothstep(1.0 - dissolveEdge, 1.0, u_progress);
     alpha = mix(alpha, 0.0, clearOut);
 
@@ -90,20 +82,19 @@ const FRAGMENT_SRC = `
 `
 
 interface Props {
-  sectionRef: React.RefObject<HTMLElement | null>
+  progressRef: React.RefObject<number>
 }
 
-export default function FizzleCanvas({ sectionRef }: Props) {
+export default function FizzleCanvas({ progressRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true })
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false })
     if (!gl) return
 
-    // Compile shaders
     function createShader(type: number, source: string) {
       const shader = gl!.createShader(type)!
       gl!.shaderSource(shader, source)
@@ -120,7 +111,6 @@ export default function FizzleCanvas({ sectionRef }: Props) {
     gl.linkProgram(program)
     gl.useProgram(program)
 
-    // Full-screen quad
     const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1])
     const buf = gl.createBuffer()
     gl.bindBuffer(gl.ARRAY_BUFFER, buf)
@@ -129,25 +119,26 @@ export default function FizzleCanvas({ sectionRef }: Props) {
     gl.enableVertexAttribArray(aPos)
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0)
 
-    // Uniforms
     const uProgress = gl.getUniformLocation(program, 'u_progress')
     const uTime = gl.getUniformLocation(program, 'u_time')
     const uResolution = gl.getUniformLocation(program, 'u_resolution')
     const uBgColor = gl.getUniformLocation(program, 'u_bg_color')
 
-    // Page bg color: #F9F7F5 = rgb(249, 247, 245)
     gl.uniform3f(uBgColor, 249/255, 247/255, 245/255)
-
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 
     function resize() {
       if (!canvas) return
+      const parent = canvas.parentElement
+      if (!parent) return
+      const w = parent.clientWidth
+      const h = parent.clientHeight
       const dpr = Math.min(window.devicePixelRatio, 2)
-      canvas.width = window.innerWidth * dpr
-      canvas.height = window.innerHeight * dpr
-      canvas.style.width = window.innerWidth + 'px'
-      canvas.style.height = window.innerHeight + 'px'
+      canvas.width = w * dpr
+      canvas.height = h * dpr
+      canvas.style.width = w + 'px'
+      canvas.style.height = h + 'px'
       gl!.viewport(0, 0, canvas.width, canvas.height)
       gl!.uniform2f(uResolution, canvas.width, canvas.height)
     }
@@ -156,36 +147,10 @@ export default function FizzleCanvas({ sectionRef }: Props) {
 
     const startTime = performance.now()
     let animId: number
-    let lastProgress = 0
 
     function tick() {
       animId = requestAnimationFrame(tick)
-
-      const section = sectionRef.current
-      if (!section || !canvas) return
-
-      const rect = section.getBoundingClientRect()
-      const vh = window.innerHeight
-      const sectionH = section.offsetHeight
-
-      // Only activate when the section is approaching the viewport
-      // Section top is within 1 viewport height of being visible
-      const approaching = rect.top < vh * 1.2
-      const pastEnd = rect.bottom < 0
-
-      if (!approaching || pastEnd) {
-        canvas.style.opacity = '0'
-        lastProgress = 0
-        return
-      }
-
-      canvas.style.opacity = '1'
-
-      const progress = clamp(-rect.top / (sectionH - vh), 0, 1)
-
-      if (Math.abs(progress - lastProgress) < 0.0005 && progress > 0.01 && progress < 0.99) return
-      lastProgress = progress
-
+      const progress = progressRef.current
       const time = (performance.now() - startTime) / 1000
 
       gl!.uniform1f(uProgress, progress)
@@ -199,20 +164,16 @@ export default function FizzleCanvas({ sectionRef }: Props) {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', resize)
     }
-  }, [sectionRef])
+  }, [progressRef])
 
   return (
     <canvas
       ref={canvasRef}
       style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        zIndex: 10,
+        position: 'absolute',
+        inset: 0,
+        zIndex: 8,
         pointerEvents: 'none',
-        opacity: 0,
       }}
     />
   )

@@ -12,6 +12,7 @@ export default function RibbonSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const charsRef = useRef<(HTMLSpanElement | null)[]>([])
   const progressRef = useRef(0)
+  const fizzleProgressRef = useRef(0)
 
   useEffect(() => {
     function onScroll() {
@@ -22,6 +23,10 @@ export default function RibbonSection() {
       const vh = window.innerHeight
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
+
+      // Fizzle dissolve: happens in the first 30% of scroll progress
+      // Maps d 0→0.3 to fizzle 0→1
+      fizzleProgressRef.current = clamp(d / 0.3, 0, 1)
 
       // Heading chars — enter d 0.35-0.55, exit d 0.80-0.95
       for (let i = 0; i < charsRef.current.length; i++) {
@@ -52,92 +57,90 @@ export default function RibbonSection() {
   const chars = useMemo(() => HEADING.split(''), [])
 
   return (
-    <>
-      {/* Fizzle canvas — fixed overlay that dissolves to reveal this section */}
-      <FizzleCanvas sectionRef={sectionRef} />
-
-      <section
-        ref={sectionRef}
-        data-section="ribbon"
-        style={{ height: '400vh', position: 'relative' }}
+    <section
+      ref={sectionRef}
+      data-section="ribbon"
+      style={{ height: '400vh', position: 'relative' }}
+    >
+      <div
+        style={{
+          position: 'sticky',
+          top: 0,
+          height: '100dvh',
+          overflow: 'hidden',
+        }}
       >
+        {/* Background image + dark overlay */}
+        <img
+          src="/ribbon-bg.jpg"
+          alt=""
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            zIndex: 0,
+          }}
+        />
         <div
           style={{
-            position: 'sticky',
-            top: 0,
-            height: '100dvh',
-            overflow: 'hidden',
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(8, 5, 2, 0.55)',
+            zIndex: 1,
           }}
-        >
-          {/* Background image + dark overlay */}
-          <img
-            src="/ribbon-bg.jpg"
-            alt=""
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              zIndex: 0,
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(8, 5, 2, 0.55)',
-              zIndex: 1,
-            }}
-          />
+        />
 
-          {/* Three.js Ribbon */}
-          <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }}>
-            <ThreeRibbon progressRef={progressRef} />
-          </div>
-
-          {/* Heading */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              zIndex: 3,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-            }}
-          >
-            <h2
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontWeight: 600,
-                fontSize: 72,
-                color: 'var(--color-text-on-dark)',
-                textAlign: 'center',
-              }}
-              className="ribbon-heading"
-            >
-              {chars.map((char, i) => (
-                <span
-                  key={i}
-                  ref={(el) => { charsRef.current[i] = el }}
-                  className="anim-char"
-                >
-                  {char === ' ' ? '\u00A0' : char}
-                </span>
-              ))}
-            </h2>
-          </div>
+        {/* Three.js Ribbon */}
+        <div style={{ position: 'absolute', inset: 0, zIndex: 2, pointerEvents: 'none' }}>
+          <ThreeRibbon progressRef={progressRef} />
         </div>
 
-        <style>{`
-          @media (max-width: 767px) {
-            .ribbon-heading { font-size: 42px !important; }
-          }
-        `}</style>
-      </section>
-    </>
+        {/* Heading */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontWeight: 600,
+              fontSize: 72,
+              color: 'var(--color-text-on-dark)',
+              textAlign: 'center',
+            }}
+            className="ribbon-heading"
+          >
+            {chars.map((char, i) => (
+              <span
+                key={i}
+                ref={(el) => { charsRef.current[i] = el }}
+                className="anim-char"
+              >
+                {char === ' ' ? '\u00A0' : char}
+              </span>
+            ))}
+          </h2>
+        </div>
+
+        {/* Fizzle dissolve overlay — sits INSIDE the sticky container */}
+        <FizzleCanvas progressRef={fizzleProgressRef} />
+      </div>
+
+      <style>{`
+        @media (max-width: 767px) {
+          .ribbon-heading { font-size: 42px !important; }
+        }
+      `}</style>
+    </section>
   )
 }
 
