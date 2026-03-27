@@ -8,7 +8,7 @@ import { useEffect, useRef } from 'react'
  *   2. UV flutter  — sinusoidal UV displacement growing toward the tips
  */
 
-const BASE_SRC = '/desertassets/ribbonbg_0014_DesertBG.png'
+const BASE_SRC = '/DesertAssets/ribbonbg_0014_DesertBG.webp'
 
 // ─── WIND TUNING ─────────────────────────────────────────────────────────────
 // INTENSITY is the master dial — change only this for more/less drama.
@@ -32,20 +32,20 @@ const WIND = {
 // Rule of thumb: effective_maxDeg ≈ maxDeg × oy, keeping foreground flowers dominant.
 const LAYERS = [
   // Back → front. ox/oy = stem-root pivot as image fraction. maxDeg = peak swing.
-  //{ src: '/desertassets/ribbonbg_0002_Layer-9.png',  ox: 0.57, oy: 0.84, maxDeg: 4.5, speed: 1.20, phase: 1.80 },
-  //{ src: '/desertassets/ribbonbg_0001_Layer-8.png',  ox: 0.65, oy: 0.65, maxDeg: 3.0, speed: 1.25, phase: 2.50 },
-  { src: '/desertassets/ribbonbg_0000_Layer-7.png',  ox: 0.80, oy: 0.88, maxDeg: 5.5, speed: 1.30, phase: 3.20 },
-  { src: '/desertassets/ribbonbg_0003_Layer-10.png', ox: 0.57, oy: 0.88, maxDeg: 4.5, speed: 1.15, phase: 1.10 },
-  { src: '/desertassets/ribbonbg_0004_Layer-11.png', ox: 0.43, oy: 0.78, maxDeg: 3.5, speed: 1.10, phase: 0.40 },
-  { src: '/desertassets/ribbonbg_0005_Layer-12.png', ox: 0.43, oy: 0.68, maxDeg: 2.5, speed: 1.10, phase: 5.90 },
-  { src: '/desertassets/ribbonbg_0006_Layer-13.png', ox: 0.32, oy: 0.65, maxDeg: 2.0, speed: 1.05, phase: 5.20 },
-  { src: '/desertassets/ribbonbg_0007_Layer-14.png', ox: 0.23, oy: 0.70, maxDeg: 2.2, speed: 1.00, phase: 4.50 },
-  { src: '/desertassets/ribbonbg_0008_Layer-15.png', ox: 0.17, oy: 0.70, maxDeg: 2.0, speed: 1.00, phase: 3.80 },
-  { src: '/desertassets/ribbonbg_0009_Layer-16.png', ox: 0.27, oy: 1.00, maxDeg: 3.5, speed: 0.95, phase: 3.10 },
-  { src: '/desertassets/ribbonbg_0010_Layer-17.png', ox: 0.38, oy: 0.92, maxDeg: 3.0, speed: 0.85, phase: 2.40 },
-  { src: '/desertassets/ribbonbg_0011_Layer-18.png', ox: 0.12, oy: 0.90, maxDeg: 3.0, speed: 0.90, phase: 1.70 },
-  { src: '/desertassets/ribbonbg_0012_Layer-19.png', ox: 0.08, oy: 0.75, maxDeg: 2.2, speed: 0.80, phase: 0.90 },
-  { src: '/desertassets/ribbonbg_0013_Layer-20.png', ox: 0.05, oy: 0.68, maxDeg: 1.8, speed: 0.70, phase: 0.00 },
+  //{ src: '/DesertAssets/ribbonbg_0002_Layer-9.webp',  ox: 0.57, oy: 0.84, maxDeg: 4.5, speed: 1.20, phase: 1.80 },
+  //{ src: '/DesertAssets/ribbonbg_0001_Layer-8.webp',  ox: 0.65, oy: 0.65, maxDeg: 3.0, speed: 1.25, phase: 2.50 },
+  { src: '/DesertAssets/ribbonbg_0000_Layer-7.webp',  ox: 0.80, oy: 0.88, maxDeg: 5.5, speed: 1.30, phase: 3.20 },
+  { src: '/DesertAssets/ribbonbg_0003_Layer-10.webp', ox: 0.57, oy: 0.88, maxDeg: 4.5, speed: 1.15, phase: 1.10 },
+  { src: '/DesertAssets/ribbonbg_0004_Layer-11.webp', ox: 0.43, oy: 0.78, maxDeg: 3.5, speed: 1.10, phase: 0.40 },
+  { src: '/DesertAssets/ribbonbg_0005_Layer-12.webp', ox: 0.43, oy: 0.68, maxDeg: 2.5, speed: 1.10, phase: 5.90 },
+  { src: '/DesertAssets/ribbonbg_0006_Layer-13.webp', ox: 0.32, oy: 0.65, maxDeg: 2.0, speed: 1.05, phase: 5.20 },
+  { src: '/DesertAssets/ribbonbg_0007_Layer-14.webp', ox: 0.23, oy: 0.70, maxDeg: 2.2, speed: 1.00, phase: 4.50 },
+  { src: '/DesertAssets/ribbonbg_0008_Layer-15.webp', ox: 0.17, oy: 0.70, maxDeg: 2.0, speed: 1.00, phase: 3.80 },
+  { src: '/DesertAssets/ribbonbg_0009_Layer-16.webp', ox: 0.27, oy: 1.00, maxDeg: 3.5, speed: 0.95, phase: 3.10 },
+  { src: '/DesertAssets/ribbonbg_0010_Layer-17.webp', ox: 0.38, oy: 0.92, maxDeg: 3.0, speed: 0.85, phase: 2.40 },
+  { src: '/DesertAssets/ribbonbg_0011_Layer-18.webp', ox: 0.12, oy: 0.90, maxDeg: 3.0, speed: 0.90, phase: 1.70 },
+  { src: '/DesertAssets/ribbonbg_0012_Layer-19.webp', ox: 0.08, oy: 0.75, maxDeg: 2.2, speed: 0.80, phase: 0.90 },
+  { src: '/DesertAssets/ribbonbg_0013_Layer-20.webp', ox: 0.05, oy: 0.68, maxDeg: 1.8, speed: 0.70, phase: 0.00 },
 ]
 
 const DEG = Math.PI / 180

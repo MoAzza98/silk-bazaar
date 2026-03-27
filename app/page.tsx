@@ -17,8 +17,8 @@ export default function Home() {
   return (
     <SessionWrapper>
       <main>
-        <link rel="preload" as="image" href="/hero-bg.jpg" />
-        <link rel="preload" as="image" href="/ribbon-bg.jpg" />
+        <link rel="preload" as="image" href="/hero-bg.webp" type="image/webp" />
+        <link rel="preload" as="image" href="/ribbon-bg.webp" type="image/webp" />
 
         {/* Fixed bg at z:0 — ribbon image + fizzle canvas (below everything) */}
         <FixedBackground />

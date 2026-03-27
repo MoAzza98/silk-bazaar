@@ -151,7 +151,17 @@ export default function HeroSection() {
             transform: 'translateX(-55%)',
           }}
         >
-          <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.jpg" />
+          {/* Static fallback — shows instantly while Three.js boots */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundImage: 'url(/hero-bg.webp)',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          />
+          <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.webp" />
         </div>
 
         {/* Edge bleed overlay — layered gradients of page bg color */}
