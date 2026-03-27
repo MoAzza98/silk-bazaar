@@ -58,8 +58,9 @@ const FRAGMENT_SHADER = `
   }
 `
 
-function easeOutExpo(t: number): number {
-  return t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+// Starts slow, gains a little speed toward the end — never fast
+function easeInQuad(t: number): number {
+  return t * t
 }
 
 const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
@@ -93,7 +94,7 @@ const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
         function animate(now: number) {
           if (!uniformsRef.current) return
           const t = Math.min((now - start) / duration, 1)
-          uniformsRef.current.u_progress.value = easeOutExpo(t)
+          uniformsRef.current.u_progress.value = easeInQuad(t)
 
           if (t < 1) {
             requestAnimationFrame(animate)

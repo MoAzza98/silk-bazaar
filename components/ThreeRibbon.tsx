@@ -65,8 +65,11 @@ function textFragment(isFront: boolean) {
       ${discard}
       float p = v_uv.x / u_max_u;
       if (u_head <= u_tail || p < u_tail || p > u_head) discard;
-      float x = gl_FrontFacing ? v_uv.x + u_offset : (u_max_u - v_uv.x) - u_offset;
-      vec4 texColor = texture2D(u_map, vec2(mod(x, u_max_u) / u_max_u, v_uv.y));
+      // gl_FrontFacing = geometric front of the triangle.
+      // Swap: when front-facing, mirror the UV so text reads L→R from viewer perspective.
+      float rawX = gl_FrontFacing ? (u_max_u - v_uv.x) - u_offset : v_uv.x + u_offset;
+      float x = mod(rawX, u_max_u) / u_max_u;
+      vec4 texColor = texture2D(u_map, vec2(x, v_uv.y));
       float tipFade = smoothstep(u_tail, u_tail + u_fade_w, p)
                     * smoothstep(u_head, u_head - u_fade_w, p);
       gl_FragColor = vec4(texColor.rgb, texColor.a * tipFade);
@@ -154,11 +157,14 @@ export default function ThreeRibbon({ progressRef, backRef, frontRef }: Props) {
       positions.push(p.x - widthDir.x * hw, p.y - widthDir.y * hw, p.z - widthDir.z * hw)
 
       if (i > 0) arcLengths.push(arcLengths[i - 1] + helixPoints[i].distanceTo(helixPoints[i - 1]))
-      const u = arcLengths[i] * (1 / aspect)
-      uvs.push(u, 0)
-      uvs.push(u, 1)
+      // UV x placeholder — will be recomputed after texture is measured
+      uvs.push(0, 0)
+      uvs.push(0, 1)
     }
-    const maxU = arcLengths[segments] * (1 / aspect)
+
+    // Compute UV x after we know the texture dimensions
+    // This will be filled in after the texture canvas is created
+    const totalArcLength = arcLengths[segments]
 
     for (let i = 0; i < segments; i++) {
       const a = i * 2, b = a + 1, c = a + 2, d = a + 3
@@ -172,19 +178,37 @@ export default function ThreeRibbon({ progressRef, backRef, frontRef }: Props) {
     geometry.setIndex(indices)
     geometry.computeVertexNormals()
 
-    // Text texture
+    // Text texture — match Perplexity: 16px on 128px canvas
     const textCanvas = document.createElement('canvas')
-    textCanvas.width = 4096
-    textCanvas.height = 128
+    const texH = 128
+    textCanvas.height = texH
     const tctx = textCanvas.getContext('2d')!
-    tctx.clearRect(0, 0, 4096, 128)
-    tctx.fillStyle = '#1a1208'
-    tctx.font = '500 40px Geist Mono, monospace'
+    tctx.font = '500 16px Geist Mono, monospace'
+    // Build string long enough to tile, then measure actual pixel width
     let textStr = ''
     while (tctx.measureText(textStr).width < 8192) textStr += RIBBON_TEXT
-    tctx.fillText(textStr, 0, 88)
+    const measuredWidth = tctx.measureText(textStr).width
+    textCanvas.width = Math.ceil(measuredWidth)
+    // Re-set font after canvas resize (canvas resize clears context state)
+    tctx.clearRect(0, 0, textCanvas.width, texH)
+    tctx.fillStyle = '#1a1208'
+    tctx.font = '500 16px Geist Mono, monospace'
+    tctx.fillText(textStr, 0, texH * 0.6)
     const texture = new THREE.CanvasTexture(textCanvas)
     texture.wrapS = THREE.RepeatWrapping
+
+    // Now recompute UVs with the actual texture aspect ratio
+    const imgAspect = measuredWidth / texH
+    const uvAttr = geometry.getAttribute('uv') as THREE.BufferAttribute
+    for (let i = 0; i <= segments; i++) {
+      const u = arcLengths[i] / strandWidth / imgAspect
+      uvAttr.setX(i * 2, u)
+      uvAttr.setY(i * 2, 0)
+      uvAttr.setX(i * 2 + 1, u)
+      uvAttr.setY(i * 2 + 1, 1)
+    }
+    uvAttr.needsUpdate = true
+    const maxU = totalArcLength / strandWidth / imgAspect
 
     // Shared uniforms
     const sharedUniforms = {

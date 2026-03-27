@@ -49,13 +49,13 @@ export default function ManifestoSection() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '60px 32px 100px',
+        padding: '60px 32px 40px',
       }}
     >
       <div
         ref={bodyRef}
         style={{
-          maxWidth: 'var(--max-content)',
+          maxWidth: 620,
           width: '100%',
           willChange: 'opacity, filter',
         }}
@@ -77,7 +77,7 @@ export default function ManifestoSection() {
         <div
           style={{
             fontFamily: 'var(--font-display)',
-            fontWeight: 300,
+            fontWeight: 500,
             fontSize: 28,
             lineHeight: 1.65,
             color: 'var(--color-text)',

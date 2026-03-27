@@ -18,24 +18,27 @@ export default function FixedBackground() {
 
   useEffect(() => {
     function onScroll() {
-      // Drive fizzle from the MANIFESTO scroll position
-      // so dissolve starts while manifesto text is still visible
-      const manifesto = document.querySelector('section:nth-of-type(2)') // manifesto
       const ribbonSection = document.querySelector('[data-section="ribbon"]')
-      if (!manifesto || !ribbonSection) return
+      if (!ribbonSection) return
 
-      const mRect = manifesto.getBoundingClientRect()
-      const vh = window.innerHeight
-      const mH = manifesto.clientHeight
-
-      // Start dissolving when manifesto is 40% scrolled past
-      // Complete by the time the ribbon section top reaches viewport
       const rRect = ribbonSection.getBoundingClientRect()
-      const manifestoProgress = clamp((-mRect.top - mH * 0.4) / (mH * 0.5), 0, 1)
-      const ribbonProgress = clamp(-rRect.top / (ribbonSection.clientHeight - vh) / 0.3, 0, 1)
+      const rH = ribbonSection.clientHeight
+      const vh = window.innerHeight
+      const rScrollable = rH - vh
+      const ribbonScroll = clamp(-rRect.top / rScrollable, 0, 1)
 
-      // Use whichever is further along
-      fizzleProgressRef.current = Math.max(manifestoProgress, ribbonProgress)
+      // ENTRY: Start dissolving when ribbon is 0.3vh below viewport top.
+      // Complete at ribbon 15% scrolled (helix ~47% drawn at that point).
+      const dissolve = clamp(
+        (0.3 * vh - rRect.top) / (0.3 * vh + rScrollable * 0.15),
+        0, 1
+      )
+
+      // EXIT: Re-cover exactly aligned with helix erase (ribbon 64% → 100%).
+      // No dark gap — fizzle and helix erase together.
+      const exitProgress = clamp((ribbonScroll - 0.64) / 0.36, 0, 1)
+
+      fizzleProgressRef.current = dissolve * (1 - exitProgress)
     }
     window.addEventListener('scroll', onScroll, { passive: true })
     onScroll()

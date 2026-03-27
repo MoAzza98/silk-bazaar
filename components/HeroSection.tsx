@@ -282,7 +282,7 @@ export default function HeroSection() {
             {/* "Silk Bazaar" — static */}
             <h1
               style={{
-                fontFamily: 'var(--font-display)', fontWeight: 300,
+                fontFamily: 'var(--font-display)', fontWeight: 600,
                 fontSize: 96, lineHeight: '96px', textAlign: 'right',
                 color: '#1a1208', margin: 0,
               }}
@@ -308,7 +308,7 @@ export default function HeroSection() {
                   style={{
                     position: 'absolute',
                     top: 0, left: 0, right: 0, bottom: 0,
-                    fontFamily: 'var(--font-display)', fontWeight: 300,
+                    fontFamily: 'var(--font-display)', fontWeight: 600,
                     fontSize: 96, lineHeight: '96px', textAlign: 'right',
                     color: 'var(--color-twilight)',
                     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',

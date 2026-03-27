@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { signIn, useSession } from 'next-auth/react'
 import StatsBar from './StatsBar'
+import AsciiDunes from './AsciiDunes'
 
 export default function RegisterSection() {
   const { data: session } = useSession()
@@ -242,6 +243,19 @@ export default function RegisterSection() {
           .register-heading { font-size: 38px !important; }
         }
       `}</style>
+
+      {/* ASCII dunes anchored to bottom of section */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: '45vh',
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}>
+        <AsciiDunes />
+      </div>
     </section>
   )
 }
