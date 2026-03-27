@@ -162,7 +162,7 @@ export default function DesertScene() {
       alpha:              false,
       antialias:          false,
       premultipliedAlpha: false,
-    }) as WebGLRenderingContext | null
+    })!
     if (!gl) return  // WebGL unavailable — scene won't render but won't crash
 
     const prog = buildProgram(gl)

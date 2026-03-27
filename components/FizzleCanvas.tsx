@@ -89,16 +89,16 @@ export default function FizzleCanvas({ progressRef }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const canvas = canvasRef.current
+    const canvas = canvasRef.current!
     if (!canvas) return
 
-    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false })
+    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false })!
     if (!gl) return
 
     function createShader(type: number, source: string) {
-      const shader = gl!.createShader(type)!
-      gl!.shaderSource(shader, source)
-      gl!.compileShader(shader)
+      const shader = gl.createShader(type)!
+      gl.shaderSource(shader, source)
+      gl.compileShader(shader)
       return shader
     }
 
@@ -139,8 +139,8 @@ export default function FizzleCanvas({ progressRef }: Props) {
       canvas.height = h * dpr
       canvas.style.width = w + 'px'
       canvas.style.height = h + 'px'
-      gl!.viewport(0, 0, canvas.width, canvas.height)
-      gl!.uniform2f(uResolution, canvas.width, canvas.height)
+      gl.viewport(0, 0, canvas.width, canvas.height)
+      gl.uniform2f(uResolution, canvas.width, canvas.height)
     }
     resize()
     window.addEventListener('resize', resize)
@@ -153,10 +153,10 @@ export default function FizzleCanvas({ progressRef }: Props) {
       const progress = progressRef.current
       const time = (performance.now() - startTime) / 1000
 
-      gl!.uniform1f(uProgress, progress)
-      gl!.uniform1f(uTime, time)
-      gl!.clear(gl!.COLOR_BUFFER_BIT)
-      gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4)
+      gl.uniform1f(uProgress, progress)
+      gl.uniform1f(uTime, time)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
     }
     tick()
 
