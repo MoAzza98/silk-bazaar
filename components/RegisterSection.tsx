@@ -44,6 +44,7 @@ export default function RegisterSection() {
         position: 'relative',
         zIndex: 2,
         minHeight: '100vh',
+        marginTop: 'calc(-100vh)',
         background: 'var(--color-bg)',
         display: 'flex',
         alignItems: 'center',

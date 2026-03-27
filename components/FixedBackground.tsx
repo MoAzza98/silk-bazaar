@@ -2,6 +2,7 @@
 import { useEffect, useRef } from 'react'
 import { clamp } from '@/lib/scrollUtils'
 import FizzleCanvas from './FizzleCanvas'
+import DesertScene from './DesertScene'
 
 /**
  * Fixed background layer — sits at z-index: 0 below all page content.
@@ -57,19 +58,10 @@ export default function FixedBackground() {
         pointerEvents: 'none',
       }}
     >
-      {/* The scene to reveal: ribbon background image + dark overlay */}
-      <img
-        src="/ribbon-bg.jpg"
-        alt=""
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          zIndex: 0,
-        }}
-      />
+      {/* The scene to reveal: desert background + animated flower layers + dark overlay */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 0 }}>
+        <DesertScene />
+      </div>
       <div
         style={{
           position: 'absolute',
