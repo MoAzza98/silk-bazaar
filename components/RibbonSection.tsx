@@ -3,7 +3,7 @@ import { useEffect, useRef, useMemo, useState } from 'react'
 import { clamp } from '@/lib/scrollUtils'
 import ThreeRibbon from './ThreeRibbon'
 
-const HEADING = 'Silk Bazaar surfaces.'
+const HEADING = 'an endless marketplace'
 
 export default function RibbonSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
@@ -98,7 +98,7 @@ export default function RibbonSection() {
           <h2
             style={{
               fontFamily: 'var(--font-display)',
-              fontWeight: 600,
+              fontWeight: 300,
               fontSize: 72,
               color: 'var(--color-text-on-dark)',
               textAlign: 'center',
@@ -140,7 +140,7 @@ export default function RibbonSection() {
 
       <style>{`
         @media (max-width: 767px) {
-          .ribbon-heading { font-size: 42px !important; }
+          .ribbon-heading { font-size: 42px ; }
         }
       `}</style>
     </section>

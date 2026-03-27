@@ -71,18 +71,24 @@ export default function Nav() {
           justifyContent: 'space-between',
         }}
       >
-        <span
+        <a
+          href="#hero"
+          onClick={(e) => {
+            e.preventDefault()
+            window.__lenis?.scrollTo(0)
+          }}
           style={{
             fontFamily: 'var(--font-mono)',
-            fontWeight: 500,
+            fontWeight: 400,
             fontSize: 13,
             letterSpacing: '0.12em',
             color: dark ? 'var(--color-text-on-dark)' : 'var(--color-text)',
             transition: 'color 1000ms',
+            textDecoration: 'none',
           }}
         >
           SILK BAZAAR
-        </span>
+        </a>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
           {[
@@ -120,15 +126,14 @@ export default function Nav() {
             }}
             style={{
               fontFamily: 'var(--font-mono)',
-              fontWeight: 500,
+              fontWeight: 400,
               fontSize: 12,
               letterSpacing: '0.06em',
-              background: 'var(--color-twilight)',
-              color: '#fff',
-              padding: '8px 20px',
-              borderRadius: 40,
-              textDecoration: 'none',
+              color: dark ? 'var(--color-text-on-dark)' : 'var(--color-text)',
+              textDecoration: 'underline',
+              textUnderlineOffset: 3,
               whiteSpace: 'nowrap',
+              transition: 'color 1000ms',
             }}
           >
             Register Interest →

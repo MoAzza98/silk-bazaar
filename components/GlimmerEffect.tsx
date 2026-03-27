@@ -122,10 +122,6 @@ const GlimmerEffect = forwardRef<GlimmerHandle, { imageSrc: string }>(
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
       renderer.setSize(width, height)
       renderer.setClearAlpha(0)
-      // Override Three.js pixel-width inline styles so the canvas always
-      // fills the container regardless of any post-mount layout shifts.
-      renderer.domElement.style.cssText =
-        'position:absolute;inset:0;width:100%;height:100%;display:block;'
       container.appendChild(renderer.domElement)
       rendererRef.current = renderer
 

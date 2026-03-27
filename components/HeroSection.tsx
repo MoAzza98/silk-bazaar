@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import type { GlimmerHandle } from './GlimmerEffect'
+import type Lenis from '@studio-freight/lenis'
+
+declare global { interface Window { __lenis?: Lenis } }
 
 // Three.js is ~600KB — load after hero text paints
 const GlimmerEffect = dynamic(() => import('./GlimmerEffect'), { ssr: false })
@@ -151,16 +154,6 @@ export default function HeroSection() {
             transform: 'translateX(-55%)',
           }}
         >
-          {/* Static fallback — shows instantly while Three.js boots */}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              backgroundImage: 'url(/hero-bg.webp)',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-            }}
-          />
           <GlimmerEffect ref={glimmerRef} imageSrc="/hero-bg.webp" />
         </div>
 
@@ -293,7 +286,7 @@ export default function HeroSection() {
             {/* "Silk Bazaar" — static */}
             <h1
               style={{
-                fontFamily: 'var(--font-display)', fontWeight: 600,
+                fontFamily: 'var(--font-display)', fontWeight: 300,
                 fontSize: 96, lineHeight: '96px', textAlign: 'right',
                 color: '#1a1208', margin: 0,
               }}
@@ -345,6 +338,31 @@ export default function HeroSection() {
                   {VERBS[verbIndex]}
                 </span>
               )}
+            </div>
+            {/* Register Interest CTA */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 28 }}>
+              <a
+                href="#register"
+                onClick={(e) => {
+                  e.preventDefault()
+                  window.__lenis?.scrollTo('#register')
+                }}
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  fontWeight: 500,
+                  fontSize: 13,
+                  letterSpacing: '0.06em',
+                  background: 'var(--color-twilight)',
+                  color: '#fff',
+                  padding: '10px 24px',
+                  borderRadius: 40,
+                  textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                  display: 'inline-block',
+                }}
+              >
+                Register Interest →
+              </a>
             </div>
           </div>
         </div>
