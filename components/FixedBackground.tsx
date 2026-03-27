@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { clamp } from '@/lib/scrollUtils'
 import FizzleCanvas from './FizzleCanvas'
 import DesertScene from './DesertScene'
+import PetalLayer from './PetalLayer'
 
 /**
  * Fixed background layer — sits at z-index: 0 below all page content.
@@ -28,12 +29,24 @@ export default function FixedBackground() {
       const rScrollable = rH - vh
       const ribbonScroll = clamp(-rRect.top / rScrollable, 0, 1)
 
-      // ENTRY: Start dissolving when ribbon is 0.3vh below viewport top.
+      // ENTRY: Start dissolving when manifesto blur begins (manifesto 35% scrolled).
       // Complete at ribbon 15% scrolled (helix ~47% drawn at that point).
-      const dissolve = clamp(
-        (0.3 * vh - rRect.top) / (0.3 * vh + rScrollable * 0.15),
-        0, 1
-      )
+      const manifestoSection = document.querySelector('[data-section="manifesto"]')
+      let dissolve: number
+      if (manifestoSection) {
+        const mRect = manifestoSection.getBoundingClientRect()
+        const mH = (manifestoSection as HTMLElement).clientHeight
+        const scrollY = window.scrollY
+        // absolute scrollY when manifesto blur starts and fizzle completes
+        const entryStart = scrollY + mRect.top + mH * 0.0
+        const entryEnd   = scrollY + rRect.top + rScrollable * 0.20
+        dissolve = clamp((scrollY - entryStart) / (entryEnd - entryStart), 0, 1)
+      } else {
+        dissolve = clamp(
+          (0.3 * vh - rRect.top) / (0.3 * vh + rScrollable * 0.15),
+          0, 1
+        )
+      }
 
       // EXIT: Re-cover exactly aligned with helix erase (ribbon 64% → 100%).
       // No dark gap — fizzle and helix erase together.
@@ -71,9 +84,14 @@ export default function FixedBackground() {
         }}
       />
 
-      {/* Fizzle canvas on top — paints bg color, dissolves to reveal image */}
+      {/* Fizzle canvas — paints bg color, dissolves to reveal image */}
       <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
         <FizzleCanvas progressRef={fizzleProgressRef} />
+      </div>
+
+      {/* Petals above everything — visible through the dissolved fizzle */}
+      <div style={{ position: 'absolute', inset: 0, zIndex: 3, pointerEvents: 'none' }}>
+        <PetalLayer />
       </div>
     </div>
   )

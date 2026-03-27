@@ -25,16 +25,16 @@ export default function RibbonSection() {
       const d = clamp(-top / (height - vh), 0, 1)
       progressRef.current = d
 
-      // Heading chars — enter d 0.35-0.55, exit d 0.80-0.95
+      // Heading chars — enter d 0.15-0.30, exit d 0.65-0.80
       for (let i = 0; i < charsRef.current.length; i++) {
         const span = charsRef.current[i]
         if (!span) continue
-        const charStart = 0.35 + i * 0.004
-        const charEnd = charStart + 0.08
+        const charStart = 0.15 + i * 0.006
+        const charEnd = charStart + 0.10
         const enterP = clamp((d - charStart) / (charEnd - charStart), 0, 1)
         const easedEnter = cubicBezier(0.12, 1, 0.72, 1, enterP)
 
-        const exitStart = 0.80 + i * 0.004
+        const exitStart = 0.65 + i * 0.004
         const exitEnd = exitStart + 0.05
         const exitP = clamp((d - exitStart) / (exitEnd - exitStart), 0, 1)
         const easedExit = cubicBezier(0.45, 0, 0.55, 1, exitP)
@@ -58,7 +58,7 @@ export default function RibbonSection() {
       ref={sectionRef}
       data-section="ribbon"
       style={{
-        height: '400vh',
+        height: '300vh',
         position: 'relative',
         zIndex: 1,
         background: 'transparent',

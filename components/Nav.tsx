@@ -1,5 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
+import type Lenis from '@studio-freight/lenis'
+
+declare global {
+  interface Window { __lenis?: Lenis }
+}
 
 export default function Nav() {
   const [entered, setEntered] = useState(false)
@@ -7,7 +12,7 @@ export default function Nav() {
   const [dark, setDark] = useState(false)
 
   useEffect(() => {
-    const timer = setTimeout(() => setEntered(true), 400)
+    const timer = setTimeout(() => setEntered(true), 80)
     return () => clearTimeout(timer)
   }, [])
 
@@ -80,10 +85,18 @@ export default function Nav() {
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-          {['Auctions', 'The Stalls', 'How It Works'].map((item) => (
+          {[
+            { label: 'Auctions',      href: '#auctions'     },
+            { label: 'The Stalls',    href: '#the-stalls'   },
+            { label: 'How It Works',  href: '#how-it-works' },
+          ].map(({ label, href }) => (
             <a
-              key={item}
-              href="#"
+              key={label}
+              href={href}
+              onClick={(e) => {
+                e.preventDefault()
+                window.__lenis?.scrollTo(href)
+              }}
               style={{
                 fontFamily: 'var(--font-mono)',
                 fontWeight: 400,
@@ -96,11 +109,15 @@ export default function Nav() {
               }}
               className="nav-link"
             >
-              {item}
+              {label}
             </a>
           ))}
           <a
             href="#register"
+            onClick={(e) => {
+              e.preventDefault()
+              window.__lenis?.scrollTo('#register')
+            }}
             style={{
               fontFamily: 'var(--font-mono)',
               fontWeight: 500,

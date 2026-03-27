@@ -20,14 +20,12 @@ export default function ManifestoSection() {
         const scrolledPast = -rect.top
         const sectionH = section.offsetHeight
 
-        // Blur starts at 35% scrolled past, fully blurred at 85%
-        const progress = clamp(
-          (scrolledPast - sectionH * 0.35) / (sectionH * 0.5),
-          0, 1
-        )
+        // Blur + fade starts immediately as section scrolls past viewport top,
+        // fully dissolved at 45% of section height scrolled past.
+        const progress = clamp(scrolledPast / (sectionH * 0.45), 0, 1)
 
         body.style.opacity = String(1 - progress)
-        body.style.filter = progress > 0.001 ? `blur(${(progress * 12).toFixed(1)}px)` : ''
+        body.style.filter = progress > 0.001 ? `blur(${(progress * 14).toFixed(1)}px)` : ''
       })
     }
 
@@ -35,21 +33,26 @@ export default function ManifestoSection() {
     onScroll()
     return () => {
       window.removeEventListener('scroll', onScroll)
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current)
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
     }
   }, [])
 
   return (
     <section
       ref={sectionRef}
+      data-section="manifesto"
       style={{
         position: 'relative',
         zIndex: 2,
         background: 'transparent',
+        minHeight: '70vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '60px 32px 40px',
+        padding: '60px 32px 20px',
       }}
     >
       <div
@@ -87,15 +90,18 @@ export default function ManifestoSection() {
           }}
           className="manifesto-body"
         >
-          <p>The place where the next Pudgy Penguins gets discovered.</p>
+          <p>Silk Bazaar is where the next Pudgy Penguins gets discovered.</p>
+
+          <p> Builders turn ideas into infra. Operators make it fly. 
+              Silk Bazaar is where they find each other.
+          </p>
+
           <p>
-            Builders are exceptional at zero to one. Operators are exceptional at one to
-            one hundred. Silk Bazaar is where they find each other — and the infrastructure
-            that lets them transact on their own terms.
+            Create, launch, and auction your project. Buy one worth running. 
+            Every listing comes with agents trained to operate and grow it from day one.
           </p>
           <p>
-            Alpha used to live in private Discord servers and closed group chats.
-            We make the invisible visible.
+            The open bazaar for projects worth building, and buying.
           </p>
         </div>
       </div>

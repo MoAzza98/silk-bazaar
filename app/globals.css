@@ -37,9 +37,16 @@ body {
 .nav-entered { transform: translateY(0) !important; }
 .nav-hidden  { transform: translateY(-100%) !important; }
 
-/* Hero load-in */
-.load-fade { opacity: 0; filter: blur(24px); }
-.loaded-in { opacity: 1 !important; filter: none !important; }
+/* Hero load-in — rAF-triggered on first frame */
+.load-fade {
+  opacity: 0;
+  filter: blur(16px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), filter 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.load-fade.load-visible {
+  opacity: 1;
+  filter: blur(0px);
+}
 
 /* Char animation spans */
 .anim-char {

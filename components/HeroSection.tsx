@@ -1,7 +1,10 @@
 'use client'
 import { useEffect, useRef, useState, useCallback } from 'react'
-import GlimmerEffect from './GlimmerEffect'
+import dynamic from 'next/dynamic'
 import type { GlimmerHandle } from './GlimmerEffect'
+
+// Three.js is ~600KB — load after hero text paints
+const GlimmerEffect = dynamic(() => import('./GlimmerEffect'), { ssr: false })
 
 const VERBS = ['discovers', 'surfaces', 'auctions', 'acquires', 'scales', 'connects', 'activates']
 
@@ -24,20 +27,20 @@ const BG92 = 'rgba(249, 247, 245, 0.92)'
 export default function HeroSection() {
   const sectionRef = useRef<HTMLDivElement>(null)
   const glimmerRef = useRef<GlimmerHandle>(null)
+  const [visible, setVisible] = useState(false)
   const [verbIndex, setVerbIndex] = useState(0)
   const [verbState, setVerbState] = useState<'idle' | 'exiting' | 'entering'>('idle')
   const [prevVerbIndex, setPrevVerbIndex] = useState(0)
-  const [loaded, setLoaded] = useState(false)
-
   // Card animation
   const cardTrackRef = useRef<HTMLDivElement>(null)
   const cardBaseRef = useRef(0)
   const [cardBase, setCardBase] = useState(0)
   const slidingRef = useRef(false)
 
+  // Fade-in on first frame after mount
   useEffect(() => {
-    const t = setTimeout(() => setLoaded(true), 100)
-    return () => clearTimeout(t)
+    const id = requestAnimationFrame(() => setVisible(true))
+    return () => cancelAnimationFrame(id)
   }, [])
 
   // Card slide — DOM recycling approach
@@ -105,11 +108,9 @@ export default function HeroSection() {
         verbIndexRef.current = next
         setVerbIndex(next)
         setVerbState('entering')
-      }, 600)
+      }, 620)
 
-      setTimeout(() => {
-        setVerbState('idle')
-      }, 1200)
+      setTimeout(() => setVerbState('idle'), 1250)
     }, 3500)
     return () => clearInterval(interval)
   }, [slideCards])
@@ -118,6 +119,7 @@ export default function HeroSection() {
 
   return (
     <section
+      id="hero"
       ref={sectionRef}
       style={{
         position: 'relative',
@@ -273,10 +275,9 @@ export default function HeroSection() {
           }}
         >
           <div
-            className={`load-fade ${loaded ? 'loaded-in' : ''}`}
+            className={visible ? 'load-fade load-visible' : 'load-fade'}
             style={{
               textAlign: 'right',
-              transition: 'opacity 1200ms ease, filter 1200ms ease',
             }}
           >
             {/* "Silk Bazaar" — static */}
@@ -291,7 +292,7 @@ export default function HeroSection() {
               Silk Bazaar
             </h1>
 
-            {/* Verb rotator — overflow hidden clip mask */}
+            {/* Verb rotator — one word in DOM at a time, no overlap possible */}
             <div
               style={{
                 position: 'relative',
@@ -302,50 +303,58 @@ export default function HeroSection() {
               }}
               className="hero-verb-wrap"
             >
-              {/* Exiting word */}
-              {verbState === 'exiting' && (
+              {verbState === 'exiting' ? (
                 <span
+                  key={`exit-${prevVerbIndex}`}
+                  className="verb-exit hero-verb"
                   style={{
                     position: 'absolute',
                     top: 0, left: 0, right: 0, bottom: 0,
-                    fontFamily: 'var(--font-display)', fontWeight: 600,
-                    fontSize: 96, lineHeight: '96px', textAlign: 'right',
+                    fontFamily: 'var(--font-display)', fontWeight: 300,
+                    fontSize: 96, lineHeight: '96px',
                     color: 'var(--color-twilight)',
                     display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                    transform: 'translateY(-38px)',
-                    opacity: 0,
-                    filter: 'blur(12px)',
-                    transition: 'transform 0.6s cubic-bezier(0.45, 0, 0.55, 1), opacity 0.6s cubic-bezier(0.45, 0, 0.55, 1), filter 0.6s cubic-bezier(0.45, 0, 0.55, 1)',
                   }}
                 >
                   {VERBS[prevVerbIndex]}
                 </span>
+              ) : (
+                <span
+                  key={verbIndex}
+                  className={verbState === 'entering' ? 'verb-enter hero-verb' : 'hero-verb'}
+                  style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0, bottom: 0,
+                    fontFamily: 'var(--font-display)', fontWeight: 300,
+                    fontSize: 96, lineHeight: '96px',
+                    color: 'var(--color-twilight)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    ...(verbState === 'idle' ? { opacity: 1 } : {}),
+                  }}
+                >
+                  {VERBS[verbIndex]}
+                </span>
               )}
-
-              {/* Current/entering word */}
-              <span
-                style={{
-                  position: 'absolute',
-                  top: 0, left: 0, right: 0, bottom: 0,
-                  fontFamily: 'var(--font-display)', fontWeight: 300,
-                  fontSize: 96, lineHeight: '96px', textAlign: 'right',
-                  color: 'var(--color-twilight)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                  transform: verbState === 'entering' ? 'translateY(0)' : verbState === 'idle' ? 'translateY(0)' : 'translateY(38px)',
-                  opacity: verbState === 'entering' || verbState === 'idle' ? 1 : 0,
-                  filter: verbState === 'entering' || verbState === 'idle' ? 'blur(0px)' : 'blur(12px)',
-                  transition: verbState !== 'idle' ? 'transform 0.6s cubic-bezier(0.45, 0, 0.55, 1), opacity 0.6s cubic-bezier(0.45, 0, 0.55, 1), filter 0.6s cubic-bezier(0.45, 0, 0.55, 1)' : 'none',
-                }}
-                className="hero-verb"
-              >
-                {VERBS[verbIndex]}
-              </span>
             </div>
           </div>
         </div>
       </div>
 
       <style>{`
+        @keyframes verb-exit-up {
+          from { opacity: 1; filter: blur(0px);  transform: translateY(0); }
+          to   { opacity: 0; filter: blur(10px); transform: translateY(-48px); }
+        }
+        @keyframes verb-enter-up {
+          from { opacity: 0; filter: blur(10px); transform: translateY(48px); }
+          to   { opacity: 1; filter: blur(0px);  transform: translateY(0); }
+        }
+        .verb-exit {
+          animation: verb-exit-up 560ms cubic-bezier(0.45, 0, 0.55, 1) forwards;
+        }
+        .verb-enter {
+          animation: verb-enter-up 580ms cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
         @media (max-width: 767px) {
           .hero-cards-col { display: none !important; }
           .hero-headlines { top: 200px !important; right: 16px !important; left: 16px !important; }

@@ -11,6 +11,7 @@ const handler = NextAuth({
       authorization: {
         params: {
           scope: 'tweet.read users.read offline.access',
+            force_login: 'true',
         },
       },
       userinfo: {

@@ -1,6 +1,7 @@
 'use client'
-import { useState } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useState, useRef, useEffect } from 'react'
+import { signIn, signOut, useSession } from 'next-auth/react'
+import { clamp } from '@/lib/scrollUtils'
 import StatsBar from './StatsBar'
 import AsciiDunes from './AsciiDunes'
 
@@ -10,6 +11,44 @@ export default function RegisterSection() {
   const [emailRegistered, setEmailRegistered] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const sectionRef = useRef<HTMLElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
+  const rafRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    function onScroll() {
+      if (rafRef.current !== null) return
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = null
+        const section = sectionRef.current
+        const content = contentRef.current
+        if (!section || !content) return
+
+        const rect = section.getBoundingClientRect()
+        const vh = window.innerHeight
+
+        // Entry: blurred + transparent when section is at bottom of viewport,
+        // fully clear when section top reaches ~20% from top of viewport.
+        // rect.top goes from ~vh (just entering) down toward 0 as we scroll.
+        const entryProgress = clamp(1 - (rect.top - vh * 0.15) / (vh * 0.65), 0, 1)
+
+        content.style.opacity = String(entryProgress)
+        content.style.filter = entryProgress < 0.999
+          ? `blur(${((1 - entryProgress) * 12).toFixed(1)}px)`
+          : ''
+      })
+    }
+
+    window.addEventListener('scroll', onScroll, { passive: true })
+    onScroll()
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current)
+        rafRef.current = null
+      }
+    }
+  }, [])
 
   const isTwitterRegistered = !!session?.user?.username
 
@@ -39,13 +78,13 @@ export default function RegisterSection() {
 
   return (
     <section
+      ref={sectionRef}
       id="register"
       style={{
         position: 'relative',
         zIndex: 2,
         minHeight: '100vh',
-        marginTop: 'calc(-100vh)',
-        background: 'var(--color-bg)',
+        background: 'rgb(249, 247, 245)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -53,12 +92,16 @@ export default function RegisterSection() {
       }}
     >
       <div
+        ref={contentRef}
         style={{
           maxWidth: 'var(--max-page)',
           width: '100%',
           display: 'flex',
           gap: 64,
           alignItems: 'center',
+          position: 'relative',
+          zIndex: 1,
+          willChange: 'opacity, filter',
         }}
         className="register-grid"
       >
@@ -114,9 +157,9 @@ export default function RegisterSection() {
           style={{
             flex: 1,
             maxWidth: 420,
-            background: 'var(--color-card)',
-            border: '0.5px solid rgba(201,149,108,0.3)',
-            borderRadius: 'var(--radius-lg)',
+            background: 'rgba(255, 255, 255, 0.6)',
+            border: '1px solid rgba(39, 26, 0, 0.1)',
+            borderRadius: 4,
             padding: 32,
           }}
         >
@@ -133,6 +176,24 @@ export default function RegisterSection() {
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 400, fontSize: 12, color: 'var(--color-gold)' }}>
                 Your audience of {(session.user.followerCount ?? 0).toLocaleString()} is counted.
               </span>
+              <button
+                onClick={() => signOut({ redirect: false })}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: 0,
+                  marginTop: 16,
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: 11,
+                  color: 'var(--color-text-secondary)',
+                  cursor: 'pointer',
+                  letterSpacing: '0.06em',
+                  opacity: 0.6,
+                  display: 'block',
+                }}
+              >
+                Not you? Sign out →
+              </button>
             </div>
           ) : emailRegistered ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -146,7 +207,7 @@ export default function RegisterSection() {
           ) : (
             <>
               <button
-                onClick={() => signIn('twitter')}
+                onClick={() => signIn('twitter', { callbackUrl: '/#register' })}
                 style={{
                   width: '100%',
                   display: 'flex',

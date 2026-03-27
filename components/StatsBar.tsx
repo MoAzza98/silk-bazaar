@@ -58,8 +58,10 @@ export default function StatsBar() {
 
     function tick(now: number) {
       const t = Math.min((now - start) / duration, 1)
-      setDisplayUsers(Math.round(t * targetUsers))
-      setDisplayReach(Math.round(t * targetReach))
+      // Exponential ease-out: rockets up then decelerates into final value
+      const e = t === 1 ? 1 : 1 - Math.pow(2, -10 * t)
+      setDisplayUsers(Math.round(e * targetUsers))
+      setDisplayReach(Math.round(e * targetReach))
       if (t < 1) requestAnimationFrame(tick)
     }
     requestAnimationFrame(tick)
@@ -84,7 +86,7 @@ export default function StatsBar() {
             lineHeight: 1.1,
           }}
         >
-          {displayUsers.toLocaleString()}
+          {displayUsers.toLocaleString()}+
         </div>
         <div
           style={{
@@ -110,7 +112,7 @@ export default function StatsBar() {
             lineHeight: 1.1,
           }}
         >
-          {formatReach(displayReach)}
+          {formatReach(displayReach)}+
         </div>
         <div
           style={{

@@ -1,16 +1,23 @@
 'use client'
+import dynamic from 'next/dynamic'
 import SessionWrapper from '@/components/SessionWrapper'
 import Nav from '@/components/Nav'
 import HeroSection from '@/components/HeroSection'
-import ManifestoSection from '@/components/ManifestoSection'
-import FixedBackground from '@/components/FixedBackground'
-import RibbonSection from '@/components/RibbonSection'
-import RegisterSection from '@/components/RegisterSection'
+
+// Below-fold — loaded after hero paints
+const ManifestoSection  = dynamic(() => import('@/components/ManifestoSection'))
+const FixedBackground   = dynamic(() => import('@/components/FixedBackground'))
+const RibbonSection     = dynamic(() => import('@/components/RibbonSection'))
+const HowItWorksSection = dynamic(() => import('@/components/HowItWorksSection'))
+const AuctionsSection   = dynamic(() => import('@/components/AuctionsSection'))
+const TheStallsSection  = dynamic(() => import('@/components/TheStallsSection'))
+const RegisterSection   = dynamic(() => import('@/components/RegisterSection'))
 
 export default function Home() {
   return (
     <SessionWrapper>
       <main>
+        <link rel="preload" as="image" href="/hero-bg.jpg" />
         <link rel="preload" as="image" href="/ribbon-bg.jpg" />
 
         {/* Fixed bg at z:0 — ribbon image + fizzle canvas (below everything) */}
@@ -21,6 +28,9 @@ export default function Home() {
         <HeroSection />
         <ManifestoSection />
         <RibbonSection />
+        <HowItWorksSection />
+        <AuctionsSection />
+        <TheStallsSection />
         <RegisterSection />
       </main>
     </SessionWrapper>

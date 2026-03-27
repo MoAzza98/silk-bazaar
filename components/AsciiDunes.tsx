@@ -24,20 +24,20 @@ const STAR_CHARS = ['.', '\u00b7', '*', '+', '\u00b0']
 
 const DAY_BG = [249, 247, 245]
 const NIGHT_BG = [12, 15, 35]
-const DAY_INK = [26, 24, 21]
+const DAY_INK = [163, 149, 184]
 const NIGHT_INK = [220, 225, 235]
 
 const SAND_DAY = [
-  [226, 206, 156],
-  [202, 172, 106],
-  [174, 140, 72],
-  [142, 110, 50],
+  [184, 169, 201],  // --color-mauve #B8A9C9
+  [163, 149, 184],  // mid-lavender
+  [143, 129, 168],  // deeper lavender
+  [123, 110, 158],  // --color-twilight #7B6E9E
 ]
 
 /* ─── Module-level mutable state ─── */
 let targetOffset = 0
 let currentOffset = 0
-const DEFAULT_ACCENT = '#E8851E'
+const DEFAULT_ACCENT = '#B8A9C9'
 let targetAccentRgb = hexToRgb(DEFAULT_ACCENT)
 let currentAccentRgb = targetAccentRgb.slice() as [number, number, number]
 let targetNight = 0
@@ -142,7 +142,7 @@ export default function AsciiDunes() {
       const inkG = DAY_INK[1] + (NIGHT_INK[1] - DAY_INK[1]) * night
       const inkB = DAY_INK[2] + (NIGHT_INK[2] - DAY_INK[2]) * night
 
-      container.style.backgroundColor = rgbToHex(bgR, bgG, bgB)
+      container.style.backgroundColor = 'transparent'
       pre.style.color = rgbToHex(inkR, inkG, inkB)
 
       // Ease offset
@@ -361,7 +361,7 @@ export default function AsciiDunes() {
         position: 'absolute',
         inset: 0,
         overflow: 'hidden',
-        backgroundColor: 'var(--color-bg, #F9F7F5)',
+        backgroundColor: 'transparent',
         contain: 'strict',
       }}
     >
